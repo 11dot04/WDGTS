@@ -1,1 +1,6 @@
-
+<resources>
+    <string name="w_tithi">Panchang</string>
+    <string name="w_streaks">Streaks</string>
+    <string name="d_tithi">Tithi, paksha and lunar month, with a tap-to-peek at tomorrow</string>
+    <string name="d_streaks">Daily streaks, tap to log and launch</string>
+</resources>
