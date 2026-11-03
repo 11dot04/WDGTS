@@ -1,0 +1,47 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The runner image already ships the Android SDK; accept licenses and add the newest platform.
+      - name: Android platform
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.6.0"
+
+      # Google Sans Flex (variable) and Instrument Serif go into res/font; a missing file must fail the build.
+      - name: Fetch fonts
+        run: |
+          set -e
+          d=app/src/main/res/font
+          mkdir -p $d
+          B=https://raw.githubusercontent.com/google/fonts/main/ofl
+          curl -fsSL "$B/googlesansflex/GoogleSansFlex%5BROND%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf" -o $d/googlesansflex.ttf
+          ls -l $d
+    
+      - name: Build
+        env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+        run: gradle :app:assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wdgts-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
