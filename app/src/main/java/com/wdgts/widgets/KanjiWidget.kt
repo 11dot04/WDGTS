@@ -34,8 +34,9 @@ class KanjiWidget : AppWidgetProvider() {
 
     override fun onReceive(c: Context, i: Intent) {
         when (i.action) {
-            ACTION_ANIMATE -> animate(c)
+            ACTION_ANIMATE -> { Haptics.click(c); animate(c) }
             ACTION_LEVEL -> {
+                Haptics.click(c)
                 val n = Prefs.jlpt(c)
                 Prefs.setJlpt(c, if (n <= 1) 5 else n - 1)
                 refreshKanjiWidgets(c)
@@ -106,26 +107,32 @@ class KanjiWidget : AppWidgetProvider() {
             }
 
             val hs = 6.6f * u
+            val hv = Fonts.axes(wght = 380, wdth = 105)
             val grade = if (day.grade > 0) day.grade.toString() else "–"
-            label("${day.strokes}S—($grade)", 0.20f * w, 0.6f * pad + hs, hs, p.muted, tf)
-            label("N${day.level}", 0.75f * w, 0.6f * pad + hs, hs, p.muted, tf)
+            label("${day.strokes}S—($grade)", 0.20f * w, 0.6f * pad + hs, hs, p.muted, tf, fvar = hv)
+            label("N${day.level}", 0.75f * w, 0.6f * pad + hs, hs, p.muted, tf, fvar = hv)
 
             val gtf = Typeface.create(Typeface.SANS_SERIF, 700, false)
             val gs = s * 0.98f
             label(day.kanji, cx, baselineFor(cy, gs, gtf), gs, p.tertiary, gtf, Paint.Align.CENTER)
 
-            // meanings flank the glyph, staggered like the KWGT layout
+            // meanings flank the glyph: 1st, 3rd.. stack on the left; 2nd, 4th.. on the right (as in the KWGT version).
+            // Long ones are condensed with the width axis rather than shrunk.
             val ms = 8f * u
-            day.meanings.getOrNull(0)?.let {
-                val sz = fitSize(listOf(it), 0.28f * w - pad, ms, tf)
-                label(it, 0.29f * w, 0.47f * h, sz, p.accent, tf, Paint.Align.RIGHT)
+            val leftM = day.meanings.filterIndexed { i, _ -> i % 2 == 0 }.take(2)
+            val rightM = day.meanings.filterIndexed { i, _ -> i % 2 == 1 }.take(2)
+            leftM.forEachIndexed { i, t ->
+                val y = 0.465f * h + (i - (leftM.size - 1) / 2f) * 0.11f * h
+                val (sz, fv) = fitByAxis(t, 0.305f * w - pad, ms, tf, wght = 400, wdthMax = 100)
+                label(t, 0.305f * w, y, sz, p.accent, tf, Paint.Align.RIGHT, fvar = fv)
             }
-            day.meanings.getOrNull(1)?.let {
-                val sz = fitSize(listOf(it), w - 0.71f * w - pad, ms, tf)
-                label(it, 0.71f * w, 0.36f * h, sz, p.accent, tf)
+            rightM.forEachIndexed { i, t ->
+                val y = 0.34f * h + i * 0.11f * h
+                val (sz, fv) = fitByAxis(t, w - 0.685f * w - pad, ms, tf, wght = 400, wdthMax = 100)
+                label(t, 0.685f * w, y, sz, p.accent, tf, fvar = fv)
             }
 
-            // readings
+            // readings: wrap onto a second line at full size instead of shrinking
             val lineY = 0.775f * h
             val colW = 0.43f * w
             val x1 = pad
@@ -137,10 +144,10 @@ class KanjiWidget : AppWidgetProvider() {
             label("KUN’YOMI", x2, lineY + 1.4f * u + ls, ls, p.muted, Fonts.MONO, tracking = 0.04f)
             val rs = 7.4f * u
             val ry = lineY + 1.4f * u + ls + rs * 1.3f
-            val on = day.on.take(3).joinToString("、").ifEmpty { "—" }
-            val kun = day.kun.take(3).joinToString("、").ifEmpty { "—" }
-            label(on, x1, ry, fitSize(listOf(on), colW, rs, tf), p.accent, tf)
-            label(kun, x2, ry, fitSize(listOf(kun), colW, rs, tf), p.accent, tf)
+            for ((x, list) in listOf(x1 to day.on, x2 to day.kun)) {
+                val wr = wrapFit(list.take(4).joinToString("、").ifEmpty { "—" }, colW, 2, rs, tf)
+                wr.lines.forEachIndexed { i, l -> label(l, x, ry + i * wr.size * 1.18f, wr.size, p.accent, tf, fvar = wr.fvar) }
+            }
         }
 
         // ---------------------------------------------------------------- stroke animation
@@ -161,6 +168,7 @@ class KanjiWidget : AppWidgetProvider() {
             val step = (6500L / (strokes.size * sub)).coerceIn(50L, 140L)
             val measures = strokes.map { PathMeasure(it, false) }
             for (i in strokes.indices) for (k in 1..sub) {
+                if (k == 1) Haptics.tick(c)          // one tick per stroke
                 val bmp = frame(strokes, measures, i, k / sub.toFloat(), 360, p)
                 val rv = RemoteViews(c.packageName, R.layout.widget_kanji)
                 rv.setViewVisibility(R.id.anim, View.VISIBLE)

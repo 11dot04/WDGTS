@@ -18,6 +18,11 @@ import com.wdgts.R
 import com.wdgts.core.*
 import java.time.LocalDate
 
+/**
+ * Transparent widget; the tiles rest directly on the wallpaper.
+ * Pending tile: tertiary (lavender) with surface-coloured glyph and number.
+ * Done tile: settles to the surface colour with accent glyphs.
+ */
 class StreaksWidget : AppWidgetProvider() {
 
     override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = ids.forEach { render(c, m, it) }
@@ -66,7 +71,7 @@ class StreaksWidget : AppWidgetProvider() {
             m.updateAppWidget(id, rv)
         }
 
-        /** Only the themed (monochrome) layer can be tinted cleanly; otherwise we fall back to a letter. */
+        /** Only the themed (monochrome) layer can be tinted cleanly. */
         private fun monochrome(c: Context, pkg: String): Drawable? {
             if (pkg.isEmpty()) return null
             return runCatching {
@@ -74,8 +79,18 @@ class StreaksWidget : AppWidgetProvider() {
             }.getOrNull()
         }
 
+        private fun Canvas.globe(cx: Float, cy: Float, r: Float, color: Int) {
+            val s = Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.STROKE; it.color = color; it.strokeWidth = r * 0.16f }
+            drawCircle(cx, cy, r, s)
+            drawOval(RectF(cx - r * 0.45f, cy - r, cx + r * 0.45f, cy + r), s)
+            drawLine(cx - r, cy, cx + r, cy, s)
+            drawLine(cx - r * 0.86f, cy - r * 0.5f, cx + r * 0.86f, cy - r * 0.5f, s)
+            drawLine(cx - r * 0.86f, cy + r * 0.5f, cx + r * 0.86f, cy + r * 0.5f, s)
+        }
+
         private fun Canvas.icon(ctx: Context, def: StreakDef, cx: Float, cy: Float, size: Float, color: Int) {
-            val d = monochrome(ctx, def.pkg)
+            if (def.web) { globe(cx, cy, size * 0.62f, color); return }
+            val d = monochrome(ctx, AppResolver.resolve(ctx, def))
             if (d != null) {
                 val s = size * 1.5f   // adaptive layers are 108dp with a 72dp visible area
                 d.setTint(color)
@@ -91,7 +106,10 @@ class StreaksWidget : AppWidgetProvider() {
             val p = Palette.of(ctx)
             val tf = Fonts.display(ctx)
             val u = minOf(w, h) / 100f
-            drawColor(p.surface)
+
+            // the widget is transparent; only a faint scrim sits behind the tiles
+            drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 9f * u, 9f * u,
+                Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = alpha(p.tile, 75) })
 
             val inset = 2.5f * u
             val gap = 1.8f * u
@@ -104,26 +122,25 @@ class StreaksWidget : AppWidgetProvider() {
                     inset + def.col * cw + gap / 2, inset + def.row * ch + gap / 2,
                     inset + (def.col + def.w) * cw - gap / 2, inset + (def.row + def.h) * ch - gap / 2,
                 )
-                val fill = if (st.doneToday) p.accent else p.tile
-                val fg = if (st.doneToday) p.onAccent else p.onSurface
+                val fill = if (st.doneToday) p.surface else p.tertiary
+                val ink = if (st.doneToday) p.accent else p.surface
                 val rad = minOf(rect.width(), rect.height()) * 0.22f
                 drawRoundRect(rect, rad, rad, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = fill })
 
                 val cells = def.w * def.h
-                val numColor = if (st.doneToday) p.onAccent else p.muted
                 val num = st.count.toString()
                 when {
-                    cells >= 4 -> {      // big: icon top-left, count bottom-right
-                        icon(ctx, def, rect.left + 9f * u, rect.top + 9f * u, 7f * u, fg)
-                        val sz = fitSize(listOf(num), rect.width() - 10f * u, 15f * u, tf, -0.03f)
-                        label(num, rect.right - 5f * u, rect.bottom - 5f * u, sz, numColor, tf, Paint.Align.RIGHT, -0.03f)
+                    cells >= 4 -> {      // big: icon top-left, light-weight count bottom-right
+                        icon(ctx, def, rect.left + 9f * u, rect.top + 9f * u, 7f * u, ink)
+                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, 17f * u, tf, wght = 270, wdthMax = 100)
+                        label(num, rect.right - 5f * u, rect.bottom - 5f * u, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                     }
                     cells == 2 -> {      // wide: icon left, count right
-                        icon(ctx, def, rect.left + rect.height() * 0.5f, rect.centerY(), rect.height() * 0.4f, fg)
-                        val sz = fitSize(listOf(num), rect.width() * 0.5f, rect.height() * 0.5f, tf, -0.03f)
-                        label(num, rect.right - 5f * u, rect.centerY() + sz * 0.35f, sz, numColor, tf, Paint.Align.RIGHT, -0.03f)
+                        icon(ctx, def, rect.left + rect.height() * 0.5f, rect.centerY(), rect.height() * 0.4f, ink)
+                        val (sz, fv) = fitByAxis(num, rect.width() * 0.5f, rect.height() * 0.56f, tf, wght = 270, wdthMax = 100)
+                        label(num, rect.right - 5f * u, rect.centerY() + sz * 0.35f, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                     }
-                    else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.42f, fg)
+                    else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.42f, ink)
                 }
             }
         }

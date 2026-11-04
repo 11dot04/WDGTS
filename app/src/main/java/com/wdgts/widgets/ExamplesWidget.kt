@@ -24,6 +24,7 @@ class ExamplesWidget : AppWidgetProvider() {
 
     override fun onReceive(c: Context, i: Intent) {
         if (i.action == ACTION_NEXT) {
+            Haptics.tick(c)
             val d = KanjiRepo.cached(c)
             if (d != null && d.examples.isNotEmpty()) {
                 Prefs.setExIndex(c, d.kanji, (Prefs.exIndex(c, d.kanji) + 1) % d.examples.size)
@@ -71,18 +72,24 @@ class ExamplesWidget : AppWidgetProvider() {
 
             label("[${idx + 1}]", 0.075f * w, 0.14f * h, 7.5f * u, p.accent, Fonts.MONO)
 
-            // M3 Expressive Cookie12Sided badge holding the kanji
+            // M3 Expressive badge: a different shape for every kanji (bun, gem, cookie, clover...)
             val br = 6.8f * u
-            drawShape(M3Shapes.Cookie12, 0.88f * w, 0.12f * h, br * 2f, p.accent)
+            drawShape(M3Shapes.pick(day.kanji.codePointAt(0).toLong()), 0.88f * w, 0.12f * h, br * 2f, p.accent)
             val ks = br * 1.05f
             label(day.kanji, 0.88f * w, baselineFor(0.12f * h, ks, tf), ks, p.surface, tf, Paint.Align.CENTER)
 
-            label(ex.reading, 0.075f * w, 0.345f * h,
-                fitSize(listOf(ex.reading), 0.85f * w, 6.4f * u, tf), p.muted, tf)
-            label(ex.written, 0.075f * w, 0.545f * h,
-                fitSize(listOf(ex.written), 0.85f * w, 17f * u, tf), p.accent, tf)
-            label(ex.gloss, 0.93f * w, 0.69f * h,
-                fitSize(listOf(ex.gloss), 0.85f * w, 8.6f * u, tf), p.accent, tf, Paint.Align.RIGHT)
+            val rw = wrapFit(ex.reading, 0.85f * w, 1, 6.4f * u, tf)
+            label(ex.reading, 0.075f * w, 0.345f * h, rw.size, p.muted, tf, fvar = rw.fvar)
+
+            // the word keeps its size: the width axis condenses it before the size ever drops
+            val (ws, wv) = fitByAxis(ex.written, 0.86f * w, 20f * u, tf, wght = 300, wdthMax = 100)
+            label(ex.written, 0.075f * w, 0.545f * h, ws, p.accent, tf, fvar = wv)
+
+            // gloss: right-aligned, wraps onto up to three lines at full size
+            val g = wrapFit(ex.gloss, 0.84f * w, 3, 8.6f * u, tf, wght = 420)
+            g.lines.forEachIndexed { i, l ->
+                label(l, 0.93f * w, 0.655f * h + i * g.size * 1.22f, g.size, p.accent, tf, Paint.Align.RIGHT, fvar = g.fvar)
+            }
 
             val dr = 1.5f * u
             dot(0.806f * w, 0.885f * h, dr, p.tertiary)
