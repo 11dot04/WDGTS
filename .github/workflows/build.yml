@@ -1,47 +1,62 @@
-name: Build APK
+name: build
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write   # needed to attach the APK to a release on tag pushes
+
 jobs:
-  build:
+  apk:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # Widget layouts are inflated by the launcher via RemoteViews, which only allows a few classes
+      # (plain <View> is NOT one of them and shows "An error occurred when loading widget").
+      - name: Check widget layouts use RemoteViews-safe classes
+        run: |
+          bad=$(grep -hoE '<[A-Za-z.]+' app/src/main/res/layout/widget_*.xml | sort -u \
+            | grep -vE '^<(FrameLayout|LinearLayout|RelativeLayout|GridLayout|ImageView|ImageButton|TextView|Button|ProgressBar|Chronometer|TextClock|ViewFlipper|ViewStub)$' || true)
+          if [ -n "$bad" ]; then echo "Not allowed in RemoteViews:"; echo "$bad"; exit 1; fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-      # The runner image already ships the Android SDK; accept licenses and add the newest platform.
-      - name: Android platform
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" || true
+      - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "9.6.0"
+          gradle-version: '8.11.1'
 
-      # Google Sans Flex (variable) and Instrument Serif go into res/font; a missing file must fail the build.
-      - name: Fetch fonts
+      # Google Sans Flex (OFL). Skipped quietly if the download fails; a font you committed is never overwritten.
+      - name: Fetch Google Sans Flex
+        continue-on-error: true
         run: |
-          set -e
-          d=app/src/main/res/font
-          mkdir -p $d
-          B=https://raw.githubusercontent.com/google/fonts/main/ofl
-          curl -fsSL "$B/googlesansflex/GoogleSansFlex%5BROND%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf" -o $d/googlesansflex.ttf
-          ls -l $d
-    
-      - name: Build
-        env:
-          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+          mkdir -p app/src/main/assets/fonts
+          if [ ! -s app/src/main/assets/fonts/display.ttf ]; then
+            curl -fL --retry 3 -o /tmp/gsf.ttf \
+              "https://github.com/google/fonts/raw/main/ofl/googlesansflex/GoogleSansFlex%5BGRAD%2CROND%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf" \
+              && [ -s /tmp/gsf.ttf ] && mv /tmp/gsf.ttf app/src/main/assets/fonts/display.ttf \
+              || echo "font download failed; falling back to system sans"
+          fi
+
+      - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wdgts-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: wdgts-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Attach APK to release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" app/build/outputs/apk/debug/*.apk --generate-notes
