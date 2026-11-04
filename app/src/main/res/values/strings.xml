@@ -3,8 +3,22 @@
     <string name="w_streaks">Streaks</string>
     <string name="w_kanji">Kanji</string>
     <string name="w_examples">Kanji examples</string>
+    <string name="w_countdown_brutal">Countdown · Swiss</string>
+    <string name="w_countdown_shape">Countdown · Shape</string>
+    <string name="w_music_depth">Music · Depth</string>
+    <string name="w_music_frame">Music · Frame</string>
+    <string name="w_music_round">Music · Round</string>
+    <string name="w_team">Team match</string>
+    <string name="w_f1">Formula 1</string>
     <string name="d_tithi">Tithi, paksha and lunar month, with a tap-to-peek at tomorrow</string>
     <string name="d_streaks">Daily streaks, tap to log and launch</string>
     <string name="d_kanji">Kanji of the day. Tap to watch the stroke order; tap the level to change it</string>
     <string name="d_examples">Ten example words for the day\'s kanji. Tap to step through</string>
+    <string name="d_countdown_brutal">Swiss-editorial countdown with a progress readout</string>
+    <string name="d_countdown_shape">A random Material 3 shape that fills as the date nears</string>
+    <string name="d_music_depth">Now playing with the title behind a cut-out of the cover subject</string>
+    <string name="d_music_frame">Cover art in a changing Material 3 shape, wavy progress and controls</string>
+    <string name="d_music_round">Scalloped cover with a Material 3 Expressive wavy progress ring</string>
+    <string name="d_team">Next match, live score and result for your team</string>
+    <string name="d_f1">Next session countdown with the circuit layout</string>
 </resources>

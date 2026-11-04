@@ -1,0 +1,4 @@
+<resources>
+    <!-- Material Components theme used only to inflate the offscreen progress indicators -->
+    <style name="OffscreenTheme" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>
