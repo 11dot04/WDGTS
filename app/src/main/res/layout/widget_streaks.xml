@@ -6,28 +6,28 @@
     <ImageView android:id="@+id/img" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" />
     <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
         <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
-            <View android:id="@+id/z00" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z01" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z02" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z03" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z00" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z01" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z02" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z03" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
         </LinearLayout>
         <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
-            <View android:id="@+id/z10" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z11" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z12" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z13" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z10" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z11" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z12" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z13" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
         </LinearLayout>
         <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
-            <View android:id="@+id/z20" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z21" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z22" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z23" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z20" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z21" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z22" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z23" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
         </LinearLayout>
         <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal">
-            <View android:id="@+id/z30" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z31" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z32" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/z33" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z30" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z31" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z32" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/z33" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

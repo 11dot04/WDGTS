@@ -11,13 +11,13 @@
     <!-- invisible tap zones laid over the bitmap -->
     <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
         android:orientation="vertical">
-        <View android:id="@+id/zone_main"
+        <FrameLayout android:id="@+id/zone_main"
             android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="78" />
         <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
             android:layout_weight="22" android:orientation="horizontal">
-            <View android:id="@+id/zone_a" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/zone_b" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
-            <View android:id="@+id/zone_c" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/zone_a" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/zone_b" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <FrameLayout android:id="@+id/zone_c" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

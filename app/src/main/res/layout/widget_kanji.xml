@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/widget_bg">
+
+    <ImageView android:id="@+id/img"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitXY" />
+
+    <!-- stroke-order animation overlay, exactly over the glyph box (18 / 38 / 44 % rows, 31 / 38 / 31 % cols) -->
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical">
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="18" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
+            android:layout_weight="38" android:orientation="horizontal">
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="31" />
+            <ImageView android:id="@+id/anim"
+                android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="38"
+                android:scaleType="fitCenter" android:visibility="invisible" />
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="31" />
+        </LinearLayout>
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="44" />
+    </LinearLayout>
+
+    <!-- tap zones -->
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
+            android:layout_weight="14" android:orientation="horizontal">
+            <FrameLayout android:id="@+id/zone_top" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="70" />
+            <FrameLayout android:id="@+id/zone_level" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="30" />
+        </LinearLayout>
+        <FrameLayout android:id="@+id/zone_main" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="86" />
+    </LinearLayout>
+</FrameLayout>
