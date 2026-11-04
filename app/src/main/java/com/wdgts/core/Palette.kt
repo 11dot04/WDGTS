@@ -10,8 +10,9 @@ class Palette private constructor(
     val onSurface: Int,
     val muted: Int,
     val faint: Int,
-    val accent: Int,
+    val accent: Int,     // primary tone
     val onAccent: Int,
+    val tertiary: Int,   // the lavender used for the big kanji
 ) {
     companion object {
         fun of(c: Context): Palette {
@@ -26,6 +27,7 @@ class Palette private constructor(
                 faint = k(android.R.color.system_neutral2_500),
                 accent = k(android.R.color.system_accent1_200),
                 onAccent = k(android.R.color.system_accent1_900),
+                tertiary = k(android.R.color.system_accent3_200),
             ) else Palette(
                 surface = k(android.R.color.system_neutral2_100),
                 tile = k(android.R.color.system_neutral2_50),
@@ -34,6 +36,7 @@ class Palette private constructor(
                 faint = k(android.R.color.system_neutral2_400),
                 accent = k(android.R.color.system_accent1_600),
                 onAccent = k(android.R.color.system_accent1_0),
+                tertiary = k(android.R.color.system_accent3_700),
             )
         }
     }

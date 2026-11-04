@@ -38,4 +38,14 @@ object Prefs {
         if (cur.doneToday) return
         sp(c).edit().putInt("${id}_n", cur.count + 1).putLong("${id}_last", today).apply()
     }
+
+    // --- kanji ---
+    fun jlpt(c: Context) = sp(c).getInt("jlpt", 5)
+    fun setJlpt(c: Context, n: Int) = sp(c).edit().putInt("jlpt", n).apply()
+    fun kanjiJson(c: Context, level: Int): String? = sp(c).getString("kd_n$level", null)
+    fun setKanjiJson(c: Context, level: Int, json: String) = sp(c).edit().putString("kd_n$level", json).apply()
+    fun exIndex(c: Context, kanji: String): Int =
+        if (sp(c).getString("ex_kanji", "") == kanji) sp(c).getInt("ex_idx", 0) else 0
+    fun setExIndex(c: Context, kanji: String, i: Int) =
+        sp(c).edit().putString("ex_kanji", kanji).putInt("ex_idx", i).apply()
 }
