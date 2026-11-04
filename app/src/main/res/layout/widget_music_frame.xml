@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/widget_bg">
+    <ImageView android:id="@+id/img"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitXY" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical">
+        <FrameLayout android:id="@+id/zone_main"
+            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="76" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
+            android:layout_weight="24" android:orientation="horizontal">
+            <FrameLayout android:id="@+id/zone_prev" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="28" />
+            <FrameLayout android:id="@+id/zone_next" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="22" />
+            <FrameLayout android:id="@+id/zone_play" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="50" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>
