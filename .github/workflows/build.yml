@@ -39,13 +39,12 @@ jobs:
       - name: Fetch Google Sans Flex
         continue-on-error: true
         run: |
-          mkdir -p app/src/main/assets/fonts
-          if [ ! -s app/src/main/assets/fonts/display.ttf ]; then
-            curl -fL --retry 3 -o /tmp/gsf.ttf \
-              "https://github.com/google/fonts/raw/main/ofl/googlesansflex/GoogleSansFlex%5BGRAD%2CROND%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf" \
-              && [ -s /tmp/gsf.ttf ] && mv /tmp/gsf.ttf app/src/main/assets/fonts/display.ttf \
-              || echo "font download failed; falling back to system sans"
-          fi
+          set -e
+          d=app/src/main/res/font
+          mkdir -p $d
+          B=https://raw.githubusercontent.com/google/fonts/main/ofl
+          curl -fsSL "$B/googlesansflex/GoogleSansFlex%5BROND%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf" -o $d/googlesansflex.ttf
+          ls -l $d
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
