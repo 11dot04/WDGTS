@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- lets us resolve launch intents and monochrome icons for installed apps -->
     <queries>
         <intent>
@@ -34,6 +36,27 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider"
                 android:resource="@xml/streaks_widget_info" />
+        </receiver>
+
+        <receiver android:name=".widgets.KanjiWidget" android:exported="true"
+            android:label="@string/w_kanji">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/kanji_widget_info" />
+        </receiver>
+
+        <receiver android:name=".widgets.ExamplesWidget" android:exported="true"
+            android:label="@string/w_examples">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/examples_widget_info" />
         </receiver>
 
         <!-- invisible trampoline: records a streak, then opens the app -->
