@@ -5,7 +5,11 @@ plugins {
 
 android {
     namespace = "com.wdgts"
-    compileSdk = 36
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 1
+        }
+    }
     defaultConfig {
         applicationId = "com.wdgts"
         minSdk = 33          // monochrome app icons, system dynamic colours
