@@ -33,7 +33,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.11.1'
+          gradle-version: '9.6.0'
 
       # Google Sans Flex (OFL). Skipped quietly if the download fails; a font you committed is never overwritten.
       - name: Fetch Google Sans Flex
