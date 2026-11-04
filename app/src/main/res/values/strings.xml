@@ -1,6 +1,10 @@
 <resources>
     <string name="w_tithi">Panchang</string>
     <string name="w_streaks">Streaks</string>
+    <string name="w_kanji">Kanji</string>
+    <string name="w_examples">Kanji examples</string>
     <string name="d_tithi">Tithi, paksha and lunar month, with a tap-to-peek at tomorrow</string>
     <string name="d_streaks">Daily streaks, tap to log and launch</string>
+    <string name="d_kanji">Kanji of the day. Tap to watch the stroke order; tap the level to change it</string>
+    <string name="d_examples">Ten example words for the day\'s kanji. Tap to step through</string>
 </resources>
