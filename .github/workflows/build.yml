@@ -47,6 +47,18 @@ jobs:
               || echo "font download failed; falling back to system sans"
           fi
 
+      # Roboto Flex (OFL), the second variable family the music widgets cycle through. Same skip-if-present rule.
+      - name: Fetch Roboto Flex
+        continue-on-error: true
+        run: |
+          mkdir -p app/src/main/assets/fonts
+          if [ ! -s app/src/main/assets/fonts/roboto_flex.ttf ]; then
+            curl -fL --retry 3 -o /tmp/rf.ttf \
+              "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoflex/RobotoFlex%5BGRAD%2CXOPQ%2CXTRA%2CYOPQ%2CYTAS%2CYTDE%2CYTFI%2CYTLC%2CYTUC%2Copsz%2Cslnt%2Cwdth%2Cwght%5D.ttf" \
+              && [ -s /tmp/rf.ttf ] && mv /tmp/rf.ttf app/src/main/assets/fonts/roboto_flex.ttf \
+              || echo "roboto flex download failed; music widgets fall back to other faces"
+          fi
+
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
