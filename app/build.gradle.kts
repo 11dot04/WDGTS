@@ -20,3 +20,9 @@ android {
 }
 
 kotlin { jvmToolchain(17) }
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.15.0")   // PathParser for KanjiVG stroke paths
+    // MaterialShapes (M3 Expressive) + RoundedPolygon.toPath(). Bump to the newest 1.5.x if this alpha is gone.
+    implementation("androidx.compose.material3:material3:1.5.0-alpha26")
+}
