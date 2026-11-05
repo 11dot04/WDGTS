@@ -198,15 +198,15 @@ fun Canvas.moon(cx: Float, cy: Float, r: Float, elongation: Double, lit: Int, da
  */
 fun fitByAxis(
     text: String, targetW: Float, size: Float, tf: Typeface,
-    wght: Int = 450, wdthMin: Int = 75, wdthMax: Int = 125, rond: Int = 0,
+    wght: Int = 450, wdthMin: Int = 75, wdthMax: Int = 125, rond: Int = 0, grow: Boolean = false,
 ): Pair<Float, String> {
     fun fv(wdth: Int, sz: Float) = Fonts.axes(wght = wght, wdth = wdth, rond = rond, opsz = (sz / 2.6f).toInt().coerceIn(8, 144))
     fun width(wdth: Int, sz: Float) = measureText(text, sz, tf, 0f, fv(wdth, sz))
     val wMin = width(wdthMin, size)
     val wMax = width(wdthMax, size)
     return when {
-        wMax - wMin < 0.5f -> {                       // not a variable font: plain scale to fit
-            val s = size * targetW / wMax
+        wMax - wMin < 0.5f -> {                       // no width axis (e.g. CJK fallback): only ever shrink, unless [grow]
+            val s = if (grow || targetW < wMax) size * targetW / wMax else size
             s to fv(100, s)
         }
         targetW <= wMin -> { val s = size * targetW / wMin; s to fv(wdthMin, s) }
