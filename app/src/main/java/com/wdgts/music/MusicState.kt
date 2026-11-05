@@ -21,9 +21,9 @@ object MusicState {
     /** Stable per-track number: drives the random shape and the random font + axes. */
     val key: Long get() = (title.hashCode().toLong() shl 32) xor (artist.hashCode().toLong() and 0xffffffffL)
 
-    fun progress(): Float {
-        if (durationMs <= 0) return 0f
-        val p = if (playing) posMs + ((SystemClock.elapsedRealtime() - posTime) * speed).toLong() else posMs
-        return (p.toFloat() / durationMs).coerceIn(0f, 1f)
-    }
+    fun positionMs(): Long =
+        if (playing) posMs + ((SystemClock.elapsedRealtime() - posTime) * speed).toLong() else posMs
+
+    fun progress(): Float =
+        if (durationMs <= 0) 0f else (positionMs().toFloat() / durationMs).coerceIn(0f, 1f)
 }

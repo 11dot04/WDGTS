@@ -124,11 +124,17 @@ class MusicFrameWidget : MusicBase() {
 
     override fun bind(ctx: Context, rv: RemoteViews) {
         super.bind(ctx, rv)
+        rv.setOnClickPendingIntent(R.id.zone_play, broadcast(ctx, ACT_PP, 53))
         rv.setOnClickPendingIntent(R.id.zone_prev, broadcast(ctx, ACT_PREV, 51))
         rv.setOnClickPendingIntent(R.id.zone_next, broadcast(ctx, ACT_NEXT, 52))
-        rv.setOnClickPendingIntent(R.id.zone_play, broadcast(ctx, ACT_PP, 53))
     }
 
+    private fun clock(ms: Long): String {
+        val s = ms / 1000
+        return String.format(java.util.Locale.US, "%d:%02d", s / 60, s % 60)
+    }
+
+    /** Layout follows Google's unreleased M3E player concept: cover in a shape, huge title, PLAY pill + previous, next + wavy progress. */
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         if (!MusicState.hasSession) { idleCard(ctx, w, h); return }
         val p = Palette.of(ctx)
@@ -136,38 +142,54 @@ class MusicFrameWidget : MusicBase() {
         val u = minOf(w, h) / 100f
         drawColor(p.surface)
 
-        // framed cover, top-left; the shape is seeded by the track
+        // cover, centred, cropped to a shape that changes from song to song
         val poly = M3Shapes.pick(MusicState.key)
         val art = MusicState.art
-        val frame = 0.50f * minOf(w, h)
-        val fx = 6f * u + frame / 2f
-        val fy = 6f * u + frame / 2f
-        if (art != null) drawShapeBitmap(poly, fx, fy, frame, art) else drawShape(poly, fx, fy, frame, p.tile)
-        dot(w - 8f * u, 8f * u, 2.4f * u, p.onSurface)
+        val cs = 0.40f * h
+        val ccy = 0.235f * h
+        if (art != null) drawShapeBitmap(poly, w / 2f, ccy, cs, art) else drawShape(poly, w / 2f, ccy, cs, p.tile)
 
-        label(MusicState.artist, w - 6f * u, 0.49f * h, 5.8f * u, p.accent, tf, Paint.Align.RIGHT)
-
+        // huge title: random font + random axis settings per track, sized to span the card
         val fp = MusicFonts.pick(ctx, MusicState.key)
         val title = if (fp.upper) MusicState.title.uppercase() else MusicState.title
-        val ts = fitSize(listOf(title), w - 12f * u, 13f * u, fp.tf, 0f, fp.fvar)
-        label(title, 6f * u, 0.64f * h, ts, p.accent, fp.tf, fvar = fp.fvar)
+        val ts = fitSize(listOf(title), 0.90f * w, 0.20f * h, fp.tf, 0f, fp.fvar)
+        label(title, w / 2f, 0.575f * h, ts, p.accent, fp.tf, Paint.Align.CENTER, fvar = fp.fvar)
 
-        // M3 Expressive wavy linear progress (the real Material Components indicator)
-        val bar = MaterialProgress.linear(ctx, MusicState.progress(), (w - 12f * u).toInt(), p.accent, alpha(p.faint, 150))
-        if (bar != null) drawBitmap(bar, 6f * u, 0.685f * h, null)
+        val pad = 0.06f * w
+        val rh = 0.115f * h
+        val r = rh / 2f
+        val ink = p.surface
 
-        // controls
-        val r = 0.082f * w
-        val cy = 0.875f * h
-        val c1 = 6f * u + r
-        val c2 = c1 + 2f * r + 2.2f * u
-        dot(c1, cy, r, p.tertiary); skipIcon(c1, cy, r * 0.42f, p.onAccent, false)
-        dot(c2, cy, r, p.tertiary); skipIcon(c2, cy, r * 0.42f, p.onAccent, true)
-        val pill = RectF(0.52f * w, cy - r, w - 6f * u, cy + r)
+        // row 1: PLAY pill + previous
+        val y1 = 0.715f * h
+        val pill = RectF(pad, y1 - r, 0.66f * w, y1 + r)
         drawRoundRect(pill, r, r, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = p.accent })
         val lbl = if (MusicState.playing) "PAUSE" else "PLAY"
-        label(lbl, pill.centerX(), baselineFor(cy, 6.6f * u, tf), 6.6f * u, p.onAccent, tf, Paint.Align.CENTER,
-            0.04f, Fonts.axes(wght = 760, wdth = 110))
+        label(lbl, pill.centerX(), baselineFor(y1, 6.8f * u, tf), 6.8f * u, p.onAccent, tf, Paint.Align.CENTER,
+            0.02f, Fonts.axes(wght = 520, wdth = 105))
+        val prev = RectF(0.70f * w, y1 - r, w - pad, y1 + r)
+        drawRoundRect(prev, r, r, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = p.tertiary })
+        skipIcon(prev.centerX(), y1, r * 0.42f, ink, false)
+
+        // row 2: next + wavy progress with a thumb, times underneath
+        val y2 = 0.855f * h
+        val next = RectF(pad, y2 - r, pad + 0.26f * w, y2 + r)
+        drawRoundRect(next, r, r, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = p.tertiary })
+        skipIcon(next.centerX(), y2, r * 0.42f, ink, true)
+
+        val bx = next.right + 4f * u
+        val bw = w - pad - bx
+        val frac = MusicState.progress()
+        val bar = MaterialProgress.linear(ctx, frac, bw.toInt(), p.accent, alpha(p.faint, 150))
+        if (bar != null) drawBitmap(bar, bx, y2 - bar.height / 2f, null)
+        else hairline(bx, y2, bx + bw, y2, p.faint, 0.8f * u)
+        val tx = bx + frac * bw
+        drawRoundRect(RectF(tx - 0.7f * u, y2 - 4.6f * u, tx + 0.7f * u, y2 + 4.6f * u), 0.7f * u, 0.7f * u,
+            Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = p.accent })
+        if (MusicState.durationMs > 0) {
+            label(clock(MusicState.positionMs()), bx, 0.965f * h, 3.8f * u, p.muted, Fonts.MONO, tracking = 0.02f)
+            label(clock(MusicState.durationMs), w - pad, 0.965f * h, 3.8f * u, p.muted, Fonts.MONO, Paint.Align.RIGHT, 0.02f)
+        }
     }
 }
 

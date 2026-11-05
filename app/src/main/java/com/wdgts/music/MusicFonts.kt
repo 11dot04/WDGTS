@@ -32,10 +32,15 @@ object MusicFonts {
         asset(c, "roboto_flex.ttf")?.let {
             options += Pick(
                 it, "'wght' ${rnd(r, 500, 1000)}, 'wdth' ${rnd(r, 40, 151)}, 'opsz' 144, " +
-                    "'GRAD' ${rnd(r, -40, 100)}, 'slnt' ${-rnd(r, 0, 10)}", true,
+                    "'GRAD' ${rnd(r, -40, 100)}, 'slnt' ${-rnd(r, 0, 10)}, " +
+                    // the parametric axes: stroke weight, counter width, ascender/descender/cap/lowercase/figure heights
+                    "'XOPQ' ${rnd(r, 60, 140)}, 'XTRA' ${rnd(r, 400, 560)}, 'YOPQ' ${rnd(r, 40, 110)}, " +
+                    "'YTAS' ${rnd(r, 700, 850)}, 'YTDE' ${-rnd(r, 110, 260)}, 'YTFI' ${rnd(r, 600, 780)}, " +
+                    "'YTLC' ${rnd(r, 430, 560)}, 'YTUC' ${rnd(r, 600, 750)}", true,
             )
         }
         options += Pick(Typeface.create(Typeface.SERIF, 700, false), null, false)
+        options += Pick(Typeface.create(Typeface.SERIF, 600, true), null, false)
         options += Pick(Typeface.create(Typeface.create("sans-serif-condensed", Typeface.NORMAL), 800, false), null, true)
         return options[r.nextInt(options.size)]
     }
