@@ -16,49 +16,101 @@
         android:label="WDGTS"
         android:allowBackup="true">
 
-        <receiver android:name=".widgets.TithiWidget" android:exported="true"
-            android:label="@string/w_tithi">
+        <activity android:name=".SettingsActivity" android:exported="true"
+            android:label="WDGTS"
+            android:theme="@android:style/Theme.DeviceDefault.DayNight">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <receiver android:name=".widgets.TithiWidget" android:exported="true" android:label="@string/w_tithi">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="android.intent.action.DATE_CHANGED" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
                 <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
-            <meta-data android:name="android.appwidget.provider"
-                android:resource="@xml/tithi_widget_info" />
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/tithi_widget_info" />
         </receiver>
 
-        <receiver android:name=".widgets.StreaksWidget" android:exported="true"
-            android:label="@string/w_streaks">
+        <receiver android:name=".widgets.StreaksWidget" android:exported="true" android:label="@string/w_streaks">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="android.intent.action.DATE_CHANGED" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
-            <meta-data android:name="android.appwidget.provider"
-                android:resource="@xml/streaks_widget_info" />
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/streaks_widget_info" />
         </receiver>
 
-        <receiver android:name=".widgets.KanjiWidget" android:exported="true"
-            android:label="@string/w_kanji">
+        <receiver android:name=".widgets.KanjiWidget" android:exported="true" android:label="@string/w_kanji">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="android.intent.action.DATE_CHANGED" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
                 <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
-            <meta-data android:name="android.appwidget.provider"
-                android:resource="@xml/kanji_widget_info" />
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/kanji_widget_info" />
         </receiver>
 
-        <receiver android:name=".widgets.ExamplesWidget" android:exported="true"
-            android:label="@string/w_examples">
+        <receiver android:name=".widgets.ExamplesWidget" android:exported="true" android:label="@string/w_examples">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
-            <meta-data android:name="android.appwidget.provider"
-                android:resource="@xml/examples_widget_info" />
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/examples_widget_info" />
         </receiver>
+
+        <receiver android:name=".widgets.CountdownBrutalWidget" android:exported="true" android:label="@string/w_countdown_brutal">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/countdown_brutal_widget_info" />
+        </receiver>
+
+        <receiver android:name=".widgets.CountdownShapeWidget" android:exported="true" android:label="@string/w_countdown_shape">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/countdown_shape_widget_info" />
+        </receiver>
+
+        <receiver android:name=".music.MusicDepthWidget" android:exported="true" android:label="@string/w_music_depth">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/music_depth_widget_info" />
+        </receiver>
+
+        <receiver android:name=".music.MusicFrameWidget" android:exported="true" android:label="@string/w_music_frame">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/music_frame_widget_info" />
+        </receiver>
+
+        <receiver android:name=".music.MusicRoundWidget" android:exported="true" android:label="@string/w_music_round">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/music_round_widget_info" />
+        </receiver>
+
+        <receiver android:name=".sports.TeamWidget" android:exported="true" android:label="@string/w_team">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/team_widget_info" />
+        </receiver>
+
+        <receiver android:name=".f1.F1Widget" android:exported="true" android:label="@string/w_f1">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/f1_widget_info" />
+        </receiver>
+
+        <!-- reads the active media session (title, art, progress) and sends transport commands.
+             Grant it under Settings > Notifications > Device & app notifications. -->
+        <service android:name=".music.MediaListener" android:exported="true"
+            android:label="WDGTS media"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <!-- invisible trampoline: records a streak, then opens the app -->
         <activity android:name=".widgets.TapActivity" android:exported="false"
