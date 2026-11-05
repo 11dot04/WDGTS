@@ -75,7 +75,8 @@ class StreaksWidget : AppWidgetProvider() {
         private fun monochrome(c: Context, pkg: String): Drawable? {
             if (pkg.isEmpty()) return null
             return runCatching {
-                (c.packageManager.getApplicationIcon(pkg) as? AdaptiveIconDrawable)?.monochrome?.mutate()
+                val a = c.packageManager.getApplicationIcon(pkg) as? AdaptiveIconDrawable
+                (a?.monochrome ?: a?.foreground)?.mutate()      // themed layer, else the foreground as a silhouette
             }.getOrNull()
         }
 
@@ -108,11 +109,11 @@ class StreaksWidget : AppWidgetProvider() {
             val u = minOf(w, h) / 100f
 
             // the widget is transparent; only a faint scrim sits behind the tiles
-            drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 9f * u, 9f * u,
-                Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = alpha(p.tile, 75) })
+            drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 11f * u, 11f * u,
+                Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = android.graphics.Color.argb(95, 0, 0, 0) })
 
-            val inset = 2.5f * u
-            val gap = 1.8f * u
+            val inset = 8.5f * u
+            val gap = 2.8f * u
             val cw = (w - 2 * inset) / 4f
             val ch = (h - 2 * inset) / 4f
 
@@ -131,16 +132,16 @@ class StreaksWidget : AppWidgetProvider() {
                 val num = st.count.toString()
                 when {
                     cells >= 4 -> {      // big: icon top-left, light-weight count bottom-right
-                        icon(ctx, def, rect.left + 9f * u, rect.top + 9f * u, 7f * u, ink)
-                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, 17f * u, tf, wght = 270, wdthMax = 100)
-                        label(num, rect.right - 5f * u, rect.bottom - 5f * u, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
+                        icon(ctx, def, rect.left + 8.5f * u, rect.top + 8.5f * u, 10f * u, ink)
+                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, 13f * u, tf, wght = 270, wdthMax = 100)
+                        label(num, rect.right - 3.6f * u, rect.bottom - 3.4f * u, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                     }
                     cells == 2 -> {      // wide: icon left, count right
-                        icon(ctx, def, rect.left + rect.height() * 0.5f, rect.centerY(), rect.height() * 0.4f, ink)
-                        val (sz, fv) = fitByAxis(num, rect.width() * 0.5f, rect.height() * 0.56f, tf, wght = 270, wdthMax = 100)
-                        label(num, rect.right - 5f * u, rect.centerY() + sz * 0.35f, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
+                        icon(ctx, def, rect.left + rect.height() * 0.5f, rect.centerY(), rect.height() * 0.55f, ink)
+                        val (sz, fv) = fitByAxis(num, rect.width() * 0.5f, rect.height() * 0.5f, tf, wght = 270, wdthMax = 100)
+                        label(num, rect.right - 3.6f * u, rect.centerY() + sz * 0.35f, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                     }
-                    else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.42f, ink)
+                    else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.55f, ink)
                 }
             }
         }

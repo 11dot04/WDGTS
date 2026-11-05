@@ -110,7 +110,7 @@ class TithiWidget : AppWidgetProvider() {
             val tithi = d.tithiName.uppercase()
 
             // the UPTO line defines the measure: width axis slides until it spans left..right exactly
-            val (size, fv) = fitByAxis(endLabel, right - left, 12.7f * u, tf, wght = 330)
+            val (size, fv) = fitByAxis(endLabel, right - left, 12.7f * u, tf, wght = 400, grow = true)
             val lh = size * 1.06f
             val divY = 0.80f * h
             val y4 = divY - 3.2f * u
@@ -120,7 +120,7 @@ class TithiWidget : AppWidgetProvider() {
 
             // a month longer than the measure is condensed instead of shrunk
             val (ms, mv) = if (measureText(month, size, tf, 0f, fv) > right - left)
-                fitByAxis(month, right - left, size, tf, wght = 330, wdthMax = 100) else size to fv
+                fitByAxis(month, right - left, size, tf, wght = 400, wdthMax = 100) else size to fv
 
             label(endLabel, left, y4, size, p.faint, tf, fvar = fv)
             label(tithi, right, y3, size, p.muted, tf, Paint.Align.RIGHT, fvar = fv)
@@ -147,26 +147,27 @@ class TithiWidget : AppWidgetProvider() {
 
             // ---- divider + buttons ---------------------------------------------------------
             hairline(left, divY, right, divY, p.accent, 0.4f * u)
-            val bs = 5.0f * u
+            val bs = 6.4f * u
             val b1 = 0.895f * h
             val b2 = 0.955f * h
-            val bv = Fonts.axes(wght = 480, wdth = 100)
-            val midY = (b1 + b2) / 2f - bs * 0.35f
+            val bv = Fonts.axes(wght = 470, wdth = 100)
+            val btnCy = 0.91f * h
             val ink = p.tertiary
 
             if (off == 0) {
-                label("DRIK", left, b1, bs, ink, tf, tracking = 0.02f, fvar = bv)
-                label("PNCHNG", left, b2, bs, ink, tf, tracking = 0.02f, fvar = bv)
-                arrow(tithiLeft - 1.6f * u, b1 - bs * 0.38f, bs * 0.52f, ink, 0.55f * u, diagonal = true)   // aligned with the tithi column
-                nextPebbles(right - 5.2f * u, midY, 5.2f * u, ink, p.surface)
+                label("DRIK", left, b1, bs, ink, tf, fvar = bv)
+                val pw = label("PNCHNG", left, b2, bs, ink, tf, fvar = bv)
+                // the link arrow's right edge lines up with the right edge of PNCHNG
+                arrow(left + pw - 2.1f * u, b1 - bs * 0.36f, 2.1f * u, ink, 0.55f * u, diagonal = true)
+                nextPebbles(right, btnCy, 6.0f * u, ink, p.surface)
             } else {
-                label("SPLR", left, b1, bs, ink, tf, tracking = 0.02f, fvar = bv)
-                label("D+$off", left, b2, bs, ink, tf, tracking = 0.02f, fvar = bv)
-                val mx = 0.52f * w
-                label("MINUS", mx, b1, bs, ink, tf, tracking = 0.02f, fvar = bv)
-                val ow = label("ONE", mx, b2, bs, ink, tf, tracking = 0.02f, fvar = bv)
-                arrow(mx + ow + 2.2f * u, b2 - bs * 0.36f, bs * 0.46f, ink, 0.55f * u, diagonal = false)
-                nextHalves(right - 2.4f * u, midY, 4.8f * u, ink, tf, bs * 0.62f)
+                label("SPLR", left, b1, bs, ink, tf, fvar = bv)
+                label("D+$off", left, b2, bs, ink, tf, fvar = bv)
+                val mx = 0.50f * w
+                label("MINUS", mx, b1, bs, ink, tf, fvar = bv)
+                val ow = label("ONE", mx, b2, bs, ink, tf, fvar = bv)
+                arrow(mx + ow + 4.2f * u, b2 - bs * 0.36f, 2.9f * u, ink, 0.55f * u, diagonal = false)
+                nextHalves(right, btnCy, 5.4f * u, ink, tf, bs * 0.62f)
             }
         }
 
@@ -187,31 +188,40 @@ class TithiWidget : AppWidgetProvider() {
             drawPath(path, pnt)
         }
 
-        /** "Next" button: two phase-like pebbles leading into a disc with a right arrow. */
-        private fun Canvas.nextPebbles(cx: Float, cy: Float, r: Float, color: Int, hole: Int) {
+        /**
+         * "Next" button: a thin and a fat pebble, then a disc that overlaps the fat one, with one arrow
+         * running across both. [rightX] is the button's right edge.
+         */
+        private fun Canvas.nextPebbles(rightX: Float, cy: Float, r: Float, color: Int, hole: Int) {
             val f = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color }
-            drawOval(RectF(cx - 4.1f * r, cy - r, cx - 3.55f * r, cy + r), f)
-            drawOval(RectF(cx - 3.15f * r, cy - r, cx - 2.0f * r, cy + r), f)
-            drawCircle(cx, cy, r, f)
+            val discCx = rightX - r
+            val fat = RectF(rightX - 3.05f * r, cy - r, rightX - 1.6f * r, cy + r)
+            drawOval(RectF(rightX - 3.85f * r, cy - r, rightX - 3.3f * r, cy + r), f)
+            drawOval(fat, f)
+            drawCircle(discCx, cy, r, f)
             val pnt = Paint(Paint.ANTI_ALIAS_FLAG).also {
                 it.style = Paint.Style.STROKE; it.color = hole; it.strokeWidth = 0.2f * r
                 it.strokeCap = Paint.Cap.ROUND; it.strokeJoin = Paint.Join.ROUND
             }
+            val x0 = fat.centerX()
+            val x1 = discCx + 0.4f * r
             val path = Path()
-            path.moveTo(cx - 0.5f * r, cy); path.lineTo(cx + 0.5f * r, cy)
-            path.moveTo(cx + 0.1f * r, cy - 0.4f * r); path.lineTo(cx + 0.5f * r, cy); path.lineTo(cx + 0.1f * r, cy + 0.4f * r)
+            path.moveTo(x0, cy); path.lineTo(x1, cy)
+            path.moveTo(x1 - 0.4f * r, cy - 0.4f * r); path.lineTo(x1, cy); path.lineTo(x1 - 0.4f * r, cy + 0.4f * r)
             drawPath(path, pnt)
         }
 
-        /** Spoiler "NEXT": two half-discs and the word NEXT set vertically along the edge. */
+        /** Spoiler "NEXT": two overlapping half-discs and the word set vertically along the right edge (reads downward). */
         private fun Canvas.nextHalves(rightX: Float, cy: Float, r: Float, color: Int, tf: android.graphics.Typeface, ts: Float) {
             val f = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color }
-            val x2 = rightX - ts * 1.3f
-            drawArc(RectF(x2 - r * 1.8f, cy - r, x2 + 0.2f * r, cy + r), -90f, 180f, true, f)
-            drawArc(RectF(x2 - r * 2.8f, cy - r, x2 - 0.8f * r, cy + r), -90f, 180f, true, f)
+            val dw = r * 0.95f
+            val flatR = rightX - ts * 1.5f - dw                       // flat edge of the front half-disc
+            drawArc(RectF(flatR - 0.6f * dw - dw, cy - r, flatR - 0.6f * dw + dw, cy + r), -90f, 180f, true, f)
+            drawArc(RectF(flatR - dw, cy - r, flatR + dw, cy + r), -90f, 180f, true, f)
+            val tx = rightX - ts * 0.5f
             save()
-            rotate(-90f, rightX, cy)
-            label("NEXT", rightX, cy + ts * 0.35f, ts, color, tf, Paint.Align.CENTER, 0.04f, Fonts.axes(wght = 480))
+            rotate(90f, tx, cy)
+            label("NEXT", tx, cy + ts * 0.35f, ts, color, tf, Paint.Align.CENTER, 0.04f, Fonts.axes(wght = 480))
             restore()
         }
     }

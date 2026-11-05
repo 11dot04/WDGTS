@@ -92,7 +92,7 @@ class CountdownBrutalWidget : ImageWidget() {
 
         // date range, bleeding off the bottom edge; width axis stretches it to the full measure
         val range = Countdown.fmt(Prefs.cdStart(ctx), "d.MM.yy") + "—" + Countdown.fmt(Prefs.cdEnd(ctx), "d.MM")
-        val (size, fv) = fitByAxis(range, w - 2 * pad, 17f * u, tf, wght = 420)
+        val (size, fv) = fitByAxis(range, w - 2 * pad, 17f * u, tf, wght = 420, grow = true)
         label(range, pad, h - 0.5f * u, size, p.onSurface, tf, fvar = fv)
     }
 }

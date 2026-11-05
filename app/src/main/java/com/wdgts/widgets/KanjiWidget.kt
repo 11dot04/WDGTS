@@ -133,7 +133,7 @@ class KanjiWidget : AppWidgetProvider() {
             }
 
             // readings: wrap onto a second line at full size instead of shrinking
-            val lineY = 0.775f * h
+            val lineY = 0.70f * h
             val colW = 0.43f * w
             val x1 = pad
             val x2 = w - pad - colW
@@ -142,8 +142,8 @@ class KanjiWidget : AppWidgetProvider() {
             val ls = 4.2f * u
             label("ON’YOMI", x1, lineY + 1.4f * u + ls, ls, p.muted, Fonts.MONO, tracking = 0.04f)
             label("KUN’YOMI", x2, lineY + 1.4f * u + ls, ls, p.muted, Fonts.MONO, tracking = 0.04f)
-            val rs = 7.4f * u
-            val ry = lineY + 1.4f * u + ls + rs * 1.3f
+            val rs = 5.7f * u
+            val ry = lineY + 13.8f * u
             for ((x, list) in listOf(x1 to day.on, x2 to day.kun)) {
                 val wr = wrapFit(list.take(4).joinToString("、").ifEmpty { "—" }, colW, 2, rs, tf)
                 wr.lines.forEachIndexed { i, l -> label(l, x, ry + i * wr.size * 1.18f, wr.size, p.accent, tf, fvar = wr.fvar) }
