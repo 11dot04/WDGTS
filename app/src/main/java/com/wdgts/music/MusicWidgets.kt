@@ -278,7 +278,7 @@ class MusicRoundWidget : MusicBase() {
         val p = Palette.of(ctx)
         val tf = Fonts.display(ctx)
         val mono = Fonts.mono(ctx)
-        val side = minOf(w, h)
+        val side = minOf(w, h).toFloat()
         val cx = w / 2f
         val cy = h / 2f
         val u = side / 100f
