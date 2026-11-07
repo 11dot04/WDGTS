@@ -88,4 +88,21 @@ object Prefs {
     fun setResolvedPkg(c: Context, id: String, pkg: String) = sp(c).edit().putString("pkg_$id", pkg).apply()
     fun missTime(c: Context, id: String) = sp(c).getLong("pkgmiss_$id", 0L)
     fun setMissTime(c: Context, id: String, t: Long) = sp(c).edit().putLong("pkgmiss_$id", t).apply()
+
+    fun raw(c: Context) = sp(c)
+
+    // --- music: per-widget "controls visible" toggle (top-right dots / pill) ---
+    fun musicControls(c: Context, name: String) = sp(c).getBoolean("mc_$name", false)
+    fun setMusicControls(c: Context, name: String, on: Boolean) = sp(c).edit().putBoolean("mc_$name", on).apply()
+
+    // --- hud ---
+    fun hudUnlockDay(c: Context) = sp(c).getLong("hud_unlock_day", -1L)
+    fun hudUnlockAt(c: Context) = sp(c).getLong("hud_unlock_at", 0L)
+    fun setHudUnlock(c: Context, day: Long, at: Long) = sp(c).edit().putLong("hud_unlock_day", day).putLong("hud_unlock_at", at).apply()
+    fun weather(c: Context): Triple<Int, String, Long>? {
+        val s = sp(c)
+        return if (s.contains("wx_t")) Triple(s.getInt("wx_t", 0), s.getString("wx_w", "") ?: "", s.getLong("wx_at", 0L)) else null
+    }
+    fun setWeather(c: Context, t: Int, w: String) =
+        sp(c).edit().putInt("wx_t", t).putString("wx_w", w).putLong("wx_at", System.currentTimeMillis()).apply()
 }

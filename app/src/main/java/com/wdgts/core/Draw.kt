@@ -17,6 +17,11 @@ object Fonts {
     @Volatile var fvar: String? = null
     val loaded: Typeface? get() = cache
     val MONO: Typeface = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
+    private var monoCache: Typeface? = null
+
+    /** Drop a mono face (Google Sans Code / Space Mono / JetBrains Mono...) at assets/fonts/mono.ttf; else system monospace. */
+    fun mono(c: Context): Typeface = monoCache
+        ?: (runCatching { Typeface.createFromAsset(c.assets, "fonts/mono.ttf") }.getOrNull() ?: MONO).also { monoCache = it }
 
     /** Google Sans Flex axes: wght 100-900, wdth 75-125, opsz 8-144, GRAD -200-150, ROND 0-100, slnt -10-0. */
     fun axes(wght: Int = 450, wdth: Int = 100, rond: Int = 0, opsz: Int = 14, grad: Int = 0) =
