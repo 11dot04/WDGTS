@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
 
     <!-- lets us resolve launch intents and monochrome icons for installed apps -->
     <queries>
@@ -100,6 +102,11 @@
         <receiver android:name=".f1.F1Widget" android:exported="true" android:label="@string/w_f1">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/f1_widget_info" />
+        </receiver>
+
+        <receiver android:name=".hud.HudWidget" android:exported="true" android:label="@string/w_hud">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/hud_widget_info" />
         </receiver>
 
         <!-- reads the active media session (title, art, progress) and sends transport commands.
