@@ -62,6 +62,7 @@ class F1Widget : ImageWidget(200) {
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         val p = Palette.of(ctx)
         val tf = Fonts.display(ctx)
+        val mono = Fonts.mono(ctx)
         val u = minOf(w, h) / 100f
         drawColor(p.surface)
         val wk = F1Repo.cached(ctx)
@@ -72,42 +73,46 @@ class F1Widget : ImageWidget(200) {
         val now = System.currentTimeMillis()
         val live = wk.sessions.firstOrNull { now in it.startMs..it.startMs + it.durMin * 60_000L }
         val next = wk.sessions.firstOrNull { it.startMs > now }
-        val pad = 7f * u
-
-        // layout: wide -> track left / text right; square-ish -> track on top / text below
-        val wide = w >= 1.5f * h
-        val box = if (wide) h - 2 * pad else minOf(w - 2 * pad, h * 0.52f)
-        val bx = if (wide) pad else (w - box) / 2f
-        val by = pad
-        F1Repo.track(ctx, wk)?.let { drawTrack(it, bx, by, box, u, p) }
-        if (F1Repo.track(ctx, wk) == null) {
-            label(wk.round.toString(), bx + box / 2f, baselineFor(by + box / 2f, box * 0.5f, tf), box * 0.5f, p.faint, tf,
-                Paint.Align.CENTER, fvar = Fonts.axes(wght = 200, wdth = 110))
-        }
-
-        val tx = if (wide) bx + box + pad * 1.6f else pad
-        val tw = w - tx - pad
-        var y = if (wide) pad + 4.6f * u else by + box + 7f * u
-        val ms = if (wide) 4.8f * u else 4.4f * u
-        label("R${wk.round} · ${wk.country.uppercase()}", tx, y, ms, p.muted, Fonts.MONO, tracking = 0.04f)
-        y += ms * 1.9f
-        val gp = wk.name.removeSuffix(" Grand Prix").uppercase() + " GP"
-        val (gs, gv) = fitByAxis(gp, tw, if (wide) 9f * u else 8f * u, tf, wght = 520, wdthMax = 100)
-        label(gp, tx, y, gs, p.accent, tf, fvar = gv)
-
-        y += gs * 1.35f
         val cur = live ?: next
-        if (cur == null) {
-            label("WEEKEND COMPLETE", tx, y + 4f * u, 5f * u, p.muted, Fonts.MONO, tracking = 0.04f)
-            return
+        val pad = 8f * u
+        val track = F1Repo.track(ctx, wk)
+        val wide = w >= 1.5f * h
+
+        // what to print
+        val header = "R${wk.round} · ${wk.country.uppercase()}"
+        val gp = wk.name.removeSuffix(" Grand Prix").uppercase() + " GP"
+        val big = when { cur == null -> "DONE"; live != null -> "LIVE"; else -> countdown(cur.startMs - now) }
+        val z = cur?.let { ZonedDateTime.ofInstant(Instant.ofEpochMilli(it.startMs), ZoneId.systemDefault()) }
+        val sess = when {
+            cur == null -> "WEEKEND COMPLETE"
+            live != null -> cur.name
+            else -> cur.name + " · " + DateTimeFormatter.ofPattern("EEE HH:mm", Locale.getDefault()).format(z).uppercase()
         }
-        val big = if (live != null) "LIVE" else countdown(cur.startMs - now)
-        val (bs, bv) = fitByAxis(big, tw, if (wide) 17f * u else 14f * u, tf, wght = 480, wdthMax = 100)
-        label(big, tx, y + bs, bs, if (live != null) p.accent else p.onSurface, tf, fvar = bv)
-        val z = ZonedDateTime.ofInstant(Instant.ofEpochMilli(cur.startMs), ZoneId.systemDefault())
-        val whenTxt = cur.name + (if (live != null) "" else " · " +
-            DateTimeFormatter.ofPattern("EEE HH:mm", Locale.getDefault()).format(z).uppercase())
-        label(whenTxt, tx, y + bs + 6f * u, ms, p.muted, Fonts.MONO, tracking = 0.04f)
+
+        // geometry: every line has a fixed slot, so the stack can never run past the card
+        val tx: Float; val tw: Float
+        val yHeader: Float; val yGp: Float; val yBig: Float; val ySess: Float
+        val box: Float; val bx: Float; val by: Float
+        if (wide) {
+            box = h - 2 * pad; bx = pad; by = pad
+            tx = bx + box + pad * 1.6f; tw = w - tx - pad
+            yHeader = 0.20f * h; yGp = 0.40f * h; yBig = 0.71f * h; ySess = 0.89f * h
+        } else {
+            box = minOf(w - 2 * pad, 0.44f * h); bx = (w - box) / 2f; by = 0.125f * h
+            tx = pad; tw = w - 2 * pad
+            yHeader = 0.095f * h; yGp = 0.685f * h; yBig = 0.865f * h; ySess = 0.955f * h
+        }
+
+        if (track != null) drawTrack(track, bx, by, box, u, p)
+        else label(wk.round.toString(), bx + box / 2f, baselineFor(by + box / 2f, box * 0.5f, tf), box * 0.5f, p.faint, tf,
+            Paint.Align.CENTER, fvar = Fonts.axes(wght = 200, wdth = 110))
+
+        label(header, tx, yHeader, 4.4f * u, p.muted, mono, tracking = 0.04f)
+        val (gs, gv) = fitByAxis(gp, tw, if (wide) 9f * u else 8f * u, tf, wght = 520, wdthMax = 100)
+        label(gp, tx, yGp, gs, p.accent, tf, fvar = gv)
+        val (bs, bv) = fitByAxis(big, tw, if (wide) 17f * u else 14.5f * u, tf, wght = 480, wdthMax = 100)
+        label(big, tx, yBig, bs, if (live != null) p.accent else p.onSurface, tf, fvar = bv)
+        label(ellipsize(sess, tw, 4.2f * u, mono), tx, ySess, 4.2f * u, p.muted, mono, tracking = 0.04f)
     }
 
     private fun countdown(ms: Long): String {
