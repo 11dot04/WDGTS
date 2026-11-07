@@ -17,23 +17,32 @@ import java.time.format.DateTimeFormatter
 object Espn {
     private val LEAGUES = listOf("eng.1", "uefa.champions", "eng.fa", "eng.league_cup")
 
-    /** Null when the network failed (caller keeps showing the last match). */
-    fun fetch(c: Context): Match? {
+    /** [ok] is false when the network failed (the caller keeps what it had); [match] is null when no fixture exists. */
+    class Fetch(val ok: Boolean, val match: Match?)
+
+    /**
+     * Uses each competition's scoreboard over a date window (2 days back, 40 ahead). The per-team "schedule"
+     * endpoint only lists played matches, which is why the widget used to be stuck on the last result.
+     */
+    fun fetch(c: Context): Fetch {
         val id = Prefs.teamId(c)
-        // while a match is live only that competition is polled
-        val leagues = Prefs.liveLeague(c)?.let { listOf(it) } ?: LEAGUES
+        val leagues = Prefs.liveLeague(c)?.let { listOf(it) } ?: LEAGUES    // while live, poll only that competition
+        val fmt = java.time.format.DateTimeFormatter.BASIC_ISO_DATE
+        val today = java.time.LocalDate.now()
+        val range = today.minusDays(2).format(fmt) + "-" + today.plusDays(40).format(fmt)
         val all = ArrayList<Match>()
         var anyOk = false
         for (lg in leagues) {
-            val json = Http.get("https://site.api.espn.com/apis/site/v2/sports/soccer/$lg/teams/$id/schedule") ?: continue
+            val json = Http.get("https://site.api.espn.com/apis/site/v2/sports/soccer/$lg/scoreboard?dates=$range&limit=300")
+                ?: continue
             anyOk = true
             all += parse(json, lg, id)
         }
-        if (!anyOk) return null
+        if (!anyOk) return Fetch(false, null)
         val pick = select(all, System.currentTimeMillis())
         Prefs.setLiveLeague(c, if (pick?.state == "in") pick.league else null)
         if (pick != null) { Crest.ensure(c, pick.homeLogo); Crest.ensure(c, pick.awayLogo) }
-        return pick
+        return Fetch(true, pick)
     }
 
     /** Live match, else a result from the last 8 hours, else the next fixture, else the last result. */
@@ -43,7 +52,7 @@ object Espn {
             .maxByOrNull { it.kickoffMs }?.let { return it }
         all.filter { it.state == "pre" && it.kickoffMs > now - 3 * 3_600_000L }
             .minByOrNull { it.kickoffMs }?.let { return it }
-        return all.filter { it.state == "post" }.maxByOrNull { it.kickoffMs }
+        return null     // nothing live, recent or upcoming: the widget says so instead of showing an old score
     }
 
     private fun parse(json: String, league: String, teamId: String): List<Match> = runCatching {
@@ -63,6 +72,8 @@ object Espn {
                 if (cc.optString("homeAway") == "home") home = cc else away = cc
             }
             if (home == null || away == null) continue
+            // scoreboards list every match in the league: keep only this team's
+            if (home.optJSONObject("team")?.optString("id") != teamId && away.optJSONObject("team")?.optString("id") != teamId) continue
             val date = e.optString("date").ifEmpty { comp.optString("date") }
             val ms = runCatching {
                 ZonedDateTime.parse(date, DateTimeFormatter.ISO_DATE_TIME).toInstant().toEpochMilli()

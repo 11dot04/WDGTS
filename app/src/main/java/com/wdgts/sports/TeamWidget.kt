@@ -39,10 +39,10 @@ class TeamWidget : ImageWidget() {
     }
 
     private fun sync(c: Context) {
-        val m = Espn.fetch(c)
-        if (m != null) Prefs.setMatchJson(c, m.toJson())
+        val f = Espn.fetch(c)
+        if (f.ok) Prefs.setMatchJson(c, f.match?.toJson())      // a successful fetch with no match clears the card
         refreshAll(c)
-        val cur = m ?: Prefs.matchJson(c)?.let { Match.fromJson(it) }
+        val cur = if (f.ok) f.match else Prefs.matchJson(c)?.let { Match.fromJson(it) }
         Sched.arm(c, TeamWidget::class.java, ACTION_TICK, nextWake(cur), 40)
     }
 
@@ -80,7 +80,8 @@ class TeamWidget : ImageWidget() {
         drawColor(p.surface)
         val m = Prefs.matchJson(ctx)?.let { Match.fromJson(it) }
         if (m == null) {
-            label("…", w / 2f, baselineFor(h / 2f, 14f * u, tf), 14f * u, p.faint, tf, Paint.Align.CENTER)
+            label("NO MATCH", w / 2f, 0.47f * h, 9f * u, p.muted, tf, Paint.Align.CENTER, fvar = Fonts.axes(wght = 420))
+            label("SCHEDULED", w / 2f, 0.47f * h + 9.6f * u, 9f * u, p.faint, tf, Paint.Align.CENTER, fvar = Fonts.axes(wght = 420))
             return
         }
         val home = Crest.load(ctx, m.homeLogo)
