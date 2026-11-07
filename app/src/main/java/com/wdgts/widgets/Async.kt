@@ -3,6 +3,7 @@ package com.wdgts.widgets
 import android.content.BroadcastReceiver
 import android.content.Context
 import com.wdgts.f1.F1Widget
+import com.wdgts.hud.HudWidget
 import com.wdgts.music.MusicWidgets
 import com.wdgts.sports.TeamWidget
 import kotlin.concurrent.thread
@@ -27,4 +28,5 @@ fun refreshEverything(c: Context) {
     MusicWidgets.refreshAll(c)
     TeamWidget().refreshAll(c)
     F1Widget().refreshAll(c)
+    HudWidget().refreshAll(c)
 }

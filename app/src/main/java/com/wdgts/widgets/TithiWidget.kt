@@ -127,6 +127,16 @@ class TithiWidget : AppWidgetProvider() {
             label(month, left, y2, ms, p.accent, tf, fvar = mv)
             val tithiLeft = right - measureText(tithi, size, tf, 0f, fv)
             label(kp, tithiLeft, y1, size, p.muted, tf, fvar = fv)            // KP/SP shares the tithi name's left edge
+            // moon face, inline on the KP/SP line, in the empty space to its left
+            val moonR = size * 0.36f
+            if (tithiLeft - left > moonR * 2f + 3f * u) {
+                val mcx = left + moonR + 0.6f * u
+                val mcy = y1 - size * 0.36f
+                drawCircle(mcx, mcy, moonR + 1.4f * u, Paint(Paint.ANTI_ALIAS_FLAG).also {
+                    it.style = Paint.Style.STROKE; it.color = alpha(p.faint, 200); it.strokeWidth = 0.4f * u
+                })
+                moon(mcx, mcy, moonR, d.elongation, p.onSurface, alpha(p.faint, 120))
+            }
             label(num, right, y1, size, p.accent, tf, Paint.Align.RIGHT, fvar = fv)
 
             // ---- festival chips, top-left ----------------------------------------------
