@@ -8,6 +8,10 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import com.wdgts.hud.HudHooks
+import com.wdgts.hud.HudSignals
+import com.wdgts.hud.HudWidget
 import kotlin.concurrent.thread
 
 /**
@@ -19,6 +23,7 @@ class MediaListener : NotificationListenerService() {
     private val handler = Handler(Looper.getMainLooper())
     private var controllers: List<MediaController> = emptyList()
     private var msm: MediaSessionManager? = null
+    private val hud = HudHooks(this)
 
     private val callback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) = sync()
@@ -43,9 +48,22 @@ class MediaListener : NotificationListenerService() {
         attach(runCatching { m.getActiveSessions(cn) }.getOrDefault(emptyList()))
         handler.removeCallbacks(tick)
         handler.post(tick)
+        hud.attach()
+        rescan()
+    }
+
+    override fun onNotificationPosted(sbn: StatusBarNotification?) = rescan()
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) = rescan()
+
+    /** Missed calls and per-app notification counts for the HUD. */
+    private fun rescan() {
+        HudSignals.rescan(runCatching { activeNotifications?.toList() }.getOrNull() ?: emptyList())
+        HudWidget().refreshAll(this)
     }
 
     override fun onListenerDisconnected() {
+        hud.detach()
         handler.removeCallbacks(tick)
         controllers.forEach { it.unregisterCallback(callback) }
         controllers = emptyList()

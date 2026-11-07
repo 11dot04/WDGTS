@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
  */
 object Cutout {
     fun compute(c: Context, art: Bitmap, key: Long): Bitmap? {
-        val f = File(c.cacheDir, "cutout_$key.png")
+        val f = File(c.cacheDir, "cutout2_$key.png")          // v2: full-size (v1 was cropped and could not line up)
         if (f.exists()) return BitmapFactory.decodeFile(f.path)
         return runCatching {
             val seg = SubjectSegmentation.getClient(
@@ -26,27 +26,18 @@ object Cutout {
             )
             val res = Tasks.await(seg.process(InputImage.fromBitmap(art, 0)), 25, TimeUnit.SECONDS)
             val fg = res.foregroundBitmap ?: return null
-            val cropped = cropToSubject(fg) ?: return null
-            FileOutputStream(f).use { cropped.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            cropped
+            if (!hasUsableSubject(fg)) return null
+            FileOutputStream(f).use { fg.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            fg
         }.getOrNull()
     }
 
-    /** Trims transparent borders; rejects "subject = whole picture" (no depth to show). */
-    private fun cropToSubject(b: Bitmap): Bitmap? {
-        val w = b.width
-        val h = b.height
-        val px = IntArray(w * h)
-        b.getPixels(px, 0, w, 0, 0, w, h)
-        var l = w; var t = h; var r = -1; var bt = -1
-        var opaque = 0
-        for (y in 0 until h) for (x in 0 until w) {
-            if ((px[y * w + x] ushr 24) > 24) {
-                opaque++
-                if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > bt) bt = y
-            }
-        }
-        if (r < 0 || opaque < w * h * 0.04 || opaque > w * h * 0.92) return null
-        return Bitmap.createBitmap(b, l, t, r - l + 1, bt - t + 1)
+    /** A subject that is nothing, or the whole picture, gives no depth: skip it. */
+    private fun hasUsableSubject(b: Bitmap): Boolean {
+        val small = Bitmap.createScaledBitmap(b, 64, 64, true)
+        val px = IntArray(64 * 64)
+        small.getPixels(px, 0, 64, 0, 0, 64, 64)
+        val opaque = px.count { (it ushr 24) > 40 }
+        return opaque > 64 * 64 * 0.04 && opaque < 64 * 64 * 0.92
     }
 }
