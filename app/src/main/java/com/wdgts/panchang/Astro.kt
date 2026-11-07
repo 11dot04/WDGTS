@@ -108,7 +108,7 @@ object Astro {
     }
 
     /** Sunrise (upper limb, standard refraction) for a local date, as epoch ms. */
-    fun sunriseMs(date: LocalDate, zone: ZoneId, lat: Double, lon: Double): Long {
+    fun sunriseMs(date: LocalDate, zone: ZoneId, lat: Double, lon: Double, rising: Boolean = true): Long {
         val midnight = date.atStartOfDay(zone).toInstant().toEpochMilli()
         val zHours = zone.rules.getOffset(Instant.ofEpochMilli(midnight + 43_200_000L)).totalSeconds / 3600.0
         var guess = midnight + 6 * 3_600_000L
@@ -119,8 +119,11 @@ object Astro {
             if (cosH < -1.0 || cosH > 1.0) return guess      // polar day/night fallback
             val h = acos(cosH) / RAD
             val noonClock = 12.0 + zHours - lon / 15.0 - eot / 60.0
-            guess = midnight + ((noonClock - h / 15.0) * 3_600_000.0).toLong()
+            guess = midnight + ((noonClock + (if (rising) -h else h) / 15.0) * 3_600_000.0).toLong()
         }
         return guess
     }
 }
+
+/** Sunset for a local date, epoch ms. */
+fun Astro.sunsetMs(date: LocalDate, zone: ZoneId, lat: Double, lon: Double): Long = sunriseMs(date, zone, lat, lon, rising = false)
