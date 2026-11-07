@@ -10,6 +10,7 @@
     <string name="w_music_round">Music · Round</string>
     <string name="w_team">Team match</string>
     <string name="w_f1">Formula 1</string>
+    <string name="w_hud">HUD</string>
     <string name="d_tithi">Tithi, paksha and lunar month, with a tap-to-peek at tomorrow</string>
     <string name="d_streaks">Daily streaks, tap to log and launch</string>
     <string name="d_kanji">Kanji of the day. Tap to watch the stroke order; tap the level to change it</string>
@@ -21,4 +22,5 @@
     <string name="d_music_round">Scalloped cover with a Material 3 Expressive wavy progress ring</string>
     <string name="d_team">Next match, live score and result for your team</string>
     <string name="d_f1">Next session countdown with the circuit layout</string>
+    <string name="d_hud">Context-aware micrograph HUD: time, battery, weather, missed calls, events, alarms and more</string>
 </resources>
