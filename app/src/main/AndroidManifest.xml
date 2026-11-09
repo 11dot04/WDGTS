@@ -12,6 +12,10 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- lets the HUD find and bind Smartspacer -->
+        <intent>
+            <action android:name="com.kieronquinn.app.smartspacer.MANAGER" />
+        </intent>
     </queries>
 
     <application
@@ -105,7 +109,12 @@
         </receiver>
 
         <receiver android:name=".hud.HudWidget" android:exported="true" android:label="@string/w_hud">
-            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/hud_widget_info" />
         </receiver>
 
