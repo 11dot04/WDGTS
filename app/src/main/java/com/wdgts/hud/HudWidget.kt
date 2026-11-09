@@ -4,11 +4,10 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Canvas
-import android.graphics.RectF
+import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
-import android.os.BatteryManager
 import android.provider.AlarmClock
 import android.provider.CallLog
 import android.text.format.DateFormat
@@ -16,6 +15,16 @@ import android.widget.RemoteViews
 import com.wdgts.R
 import com.wdgts.SettingsActivity
 import com.wdgts.core.*
+import com.wdgts.hud.engine.GlyphRegistry
+import com.wdgts.hud.engine.Hud
+import com.wdgts.hud.engine.HudColors
+import com.wdgts.hud.engine.HudContent
+import com.wdgts.hud.engine.HudHeader
+import com.wdgts.hud.engine.HudPlan
+import com.wdgts.hud.engine.HudRenderer
+import com.wdgts.hud.engine.IconPainter
+import com.wdgts.hud.engine.TapRef
+import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
 import com.wdgts.music.MusicState
 import com.wdgts.sports.Match
 import com.wdgts.widgets.ImageWidget
@@ -28,15 +37,17 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Context-aware micrograph HUD, in the vein of the Nothing clockface: mono type, inline pills,
- * a battery, temperature and weather tokens, then the two most urgent things from [HudItems],
- * then notification-count chips.
+ * The Nothing-clockface HUD: four lines, the first is the date, the other three are filled from [HudItems].
+ * Layout, pills, bubbles and glyphs all live in com.wdgts.hud.engine; this class only supplies data,
+ * colours, tap intents and the refresh schedule.
  */
 class HudWidget : ImageWidget() {
     override val layoutRes: Int = R.layout.widget_hud
 
     override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) {
         super.onUpdate(c, m, ids)
+        val app = c.applicationContext
+        HudSmartspacerSource.start(app) { HudWidget().refreshAll(app) }
         async { Weather.refreshIfStale(c); refreshAll(c) }
         Sched.arm(c, HudWidget::class.java, ACTION_TICK, System.currentTimeMillis() + 5 * 60_000L, 70)   // fallback if the listener isn't running
     }
@@ -74,90 +85,65 @@ class HudWidget : ImageWidget() {
         }
     }
 
+    private fun blocks(c: Context) = HudItems.blocks(c, HudSmartspacerSource.blocks(c))
+
+    /** Local taps map to a [HudItems.Action]; Smartspacer taps go through [HudTapActivity]. */
+    private fun tapIntent(c: Context, tap: TapRef?, code: Int): PendingIntent {
+        if (tap != null && tap.targetId != HudItems.LOCAL) return HudTapActivity.pending(c, tap, code)
+        val action = if (tap != null && tap.targetId == HudItems.LOCAL) {
+            runCatching { HudItems.Action.valueOf(tap.actionId ?: "") }.getOrNull()
+        } else null
+        return pending(c, action ?: HudItems.Action.SETTINGS, code)
+    }
+
+    /** One tap zone per line (RemoteViews cannot report where you touched). Line 1 is the date: settings. */
     override fun bind(ctx: Context, rv: RemoteViews) {
-        val items = HudItems.build(ctx)
-        val settings = pending(ctx, HudItems.Action.SETTINGS, 71)
-        rv.setOnClickPendingIntent(R.id.zone_main, settings)
-        rv.setOnClickPendingIntent(R.id.zone_foot, settings)
-        rv.setOnClickPendingIntent(R.id.zone_r3, pending(ctx, items.getOrNull(0)?.action ?: HudItems.Action.SETTINGS, 72))
-        rv.setOnClickPendingIntent(R.id.zone_r4, pending(ctx, items.getOrNull(1)?.action ?: HudItems.Action.SETTINGS, 73))
+        val taps = HudPlan.lineTaps(blocks(ctx), Hud.BODY_LINES)
+        rv.setOnClickPendingIntent(R.id.zone_l1, pending(ctx, HudItems.Action.SETTINGS, 71))
+        listOf(R.id.zone_l2, R.id.zone_l3, R.id.zone_l4).forEachIndexed { i, id ->
+            rv.setOnClickPendingIntent(id, tapIntent(ctx, taps.getOrNull(i), 72 + i))
+        }
     }
 
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         val p = Palette.of(ctx)
-        val mono = Fonts.mono(ctx)
-        val u = minOf(w, h) / 100f
-        val st = MicroStyle(0.86f * u, p.onSurface, mono)
-        val g = st.g
-        drawColor(p.surface)
-        val left = 7f * u
-        val right = w - 7f * u
-        val zone = ZoneId.systemDefault()
-        val now = ZonedDateTime.now(zone)
-
-        // ---- row 1:  TUE [11] (NOV) ✹ 10:20 ▮ ----
-        val cy1 = 15f * u
-        var x = left
-        x += mText(now.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH).uppercase(), x, cy1, st) + st.gap
-        x += mPill(now.dayOfMonth.toString(), x, cy1, st, filled = true, color = p.accent) + st.gap
-        x += mPill(now.month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH).uppercase(), x, cy1, st, filled = false) + st.gap
-        val timeStr = DateTimeFormat(ctx, now)
-        val tSize = 8.2f * g
-        val timeW = mWidth(timeStr, st, tSize)
-        if (x + 11f * g + st.gap + timeW + 5f * g < right) {
-            if (now.hour in 6..18) drawShape(M3Shapes.Sunny, x + 4.8f * g, cy1, 9.6f * g, p.tertiary)
-            else mGlyph(Glyph.MOON, x, cy1, st, p.tertiary)
-            x += 11f * g + st.gap
-        }
-        x += mText(timeStr, x, cy1, st, tSize) + 1.8f * g
-        drawRect(x, cy1 - 3.6f * g, x + 1.9f * g, cy1 + 3.6f * g, android.graphics.Paint().also { it.color = p.onSurface })
-
-        // ---- row 2: battery, temperature, weather word ----
-        val cy2 = 31f * u
-        x = left
-        val bi = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val level = bi?.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) ?: 0
-        val scale = (bi?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100).coerceAtLeast(1)
-        val status = bi?.getIntExtra(BatteryManager.EXTRA_STATUS, 0) ?: 0
-        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
-        x += mBattery(level * 100 / scale, charging, x, cy2, st) + st.gap
-        Prefs.weather(ctx)?.let { (t, word, _) ->
-            if (x + mWidth("$t°", st, 7.4f * g) + 12f * g + mWidth(word, st) + 8f * g < right) {
-                x += mTemp(t, x, cy2, st) + st.gap
-                mBubble(word, x, cy2, st, p.accent)
-            }
-        }
-        hairline(left, 41f * u, right, 41f * u, alpha(p.faint, 150), 0.3f * u)
-
-        // ---- rows 3 and 4: the two most urgent things ----
-        val items = HudItems.build(ctx)
-        fun row(item: HudItems.Item, cy: Float, first: Boolean) {
-            val ink = if (first) p.onSurface else p.muted
-            mGlyph(item.glyph, left, cy, st, if (first) p.tertiary else p.faint)
-            var limit = right
-            if (item.arrow) { mArrowPill(right - 17f * g, cy, st, p.accent); limit = right - 17f * g - st.gap }
-            if (item.sub != null) { val sw = mBracket(item.sub, limit, cy, st, p.muted); limit -= sw + st.gap }
-            val tx = left + 11f * g + 1.6f * g
-            mText(ellipsize(item.text, limit - tx, 6.4f * g, mono), tx, cy, st, color = ink)
-        }
-        items.getOrNull(0)?.let { row(it, 55f * u, true) }
-        items.getOrNull(1)?.let { row(it, 72f * u, false) }
-
-        // ---- footer: notification counts ----
-        val cy5 = 90f * u
-        x = left
-        val chips = listOf("WA" to (HudSignals.counts["com.whatsapp"] ?: 0), "IG" to (HudSignals.counts["com.instagram.android"] ?: 0),
-            "SMS" to HudSignals.smsCount(ctx))
-        for ((name, n) in chips) if (n > 0 && x < right - 20f * g) x += mPill("$name $n", x, cy5, st, filled = false, color = p.muted) + st.gap
-        if (x == left) mText("WDGTS // HUD", x, cy5, st, 5f * g, p.faint)
+        if (CARD) drawColor(p.surface)
+        val ink = if (CARD) p.onSurface else Color.WHITE
+        val content = HudContent(
+            header = HudHeader.tokens(ZonedDateTime.now(ZoneId.systemDefault()), DateFormat.is24HourFormat(ctx)),
+            blocks = blocks(ctx),
+        )
+        renderer(ctx).draw(this, w, h, content, HudColors(ink), iconPainter(ctx))
     }
 
-    @Suppress("FunctionName")
-    private fun DateTimeFormat(ctx: Context, t: ZonedDateTime): String =
-        DateTimeFormatter.ofPattern(if (DateFormat.is24HourFormat(ctx)) "HH:mm" else "h:mm", Locale.US).format(t)
+    /** Icons without an SVG yet (phone, eye, torch, ...) are drawn by the existing mGlyph. */
+    private fun Canvas.iconPainter(ctx: Context) = IconPainter { key, c, x, cy, unit, ink ->
+        val glyph = key as? Glyph ?: return@IconPainter
+        c.mGlyph(glyph, x, cy, MicroStyle(unit * 0.945f, ink, Fonts.mono(ctx)), ink)
+    }
 
     companion object {
         private const val ACTION_TICK = "com.wdgts.HUD_TICK"
         private const val ACTION_DISMISS = "com.wdgts.HUD_DISMISS"
+
+        /** true = draw the palette surface behind the text; false = transparent, white ink (the Nothing look). */
+        private const val CARD = false
+
+        /** 'wght' axis for a variable Geist Mono; lower = thinner. Tune against the reference. */
+        private const val WEIGHT = 330
+
+        @Volatile private var cached: HudRenderer? = null
+
+        private fun renderer(ctx: Context): HudRenderer = cached ?: synchronized(this) {
+            cached ?: HudRenderer(typeface(ctx), GlyphRegistry(ctx), WEIGHT).also { cached = it }
+        }
+
+        /** A Geist Mono file in assets/fonts (any file name containing "geist" and "mono"), else the app's mono font. */
+        private fun typeface(ctx: Context): Typeface {
+            val files = runCatching { ctx.assets.list("fonts") }.getOrNull().orEmpty()
+            val f = files.firstOrNull { it.contains("geist", ignoreCase = true) && it.contains("mono", ignoreCase = true) }
+            if (f != null) runCatching { return Typeface.createFromAsset(ctx.assets, "fonts/$f") }
+            return Fonts.mono(ctx)
+        }
     }
 }

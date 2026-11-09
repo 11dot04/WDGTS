@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import com.wdgts.core.Prefs
+import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
 import java.time.LocalDate
 import kotlin.concurrent.thread
 
@@ -32,8 +33,14 @@ class HudHooks(private val c: Context) {
                     val day = LocalDate.now().toEpochDay()
                     if (Prefs.hudUnlockDay(c) != day) Prefs.setHudUnlock(c, day, now)       // first unlock of the day
                 }
-                Intent.ACTION_SCREEN_ON -> if (now - HudSignals.lastScreenOff > 20_000L || HudSignals.screenOnSince == 0L) HudSignals.screenOnSince = now
-                Intent.ACTION_SCREEN_OFF -> HudSignals.lastScreenOff = now
+                Intent.ACTION_SCREEN_ON -> {
+                    if (now - HudSignals.lastScreenOff > 20_000L || HudSignals.screenOnSince == 0L) HudSignals.screenOnSince = now
+                    HudSmartspacerSource.onScreen(true)
+                }
+                Intent.ACTION_SCREEN_OFF -> {
+                    HudSignals.lastScreenOff = now
+                    HudSmartspacerSource.onScreen(false)
+                }
                 Intent.ACTION_TIME_TICK -> if (now - lastWeather > 30 * 60_000L) {
                     lastWeather = now
                     thread { Weather.refreshIfStale(c); refresh() }
@@ -61,6 +68,7 @@ class HudHooks(private val c: Context) {
     fun attach() {
         if (attached) return
         attached = true
+        HudSmartspacerSource.start(c) { refresh() }
         val f = IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT); addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_TIME_TICK)
@@ -76,6 +84,7 @@ class HudHooks(private val c: Context) {
     fun detach() {
         if (!attached) return
         attached = false
+        HudSmartspacerSource.stop()
         runCatching { c.unregisterReceiver(receiver) }
         runCatching { c.getSystemService(CameraManager::class.java).unregisterTorchCallback(torch) }
         runCatching { c.getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(net) }

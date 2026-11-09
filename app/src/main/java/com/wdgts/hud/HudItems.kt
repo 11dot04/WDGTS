@@ -2,8 +2,22 @@ package com.wdgts.hud
 
 import android.app.AlarmManager
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import com.wdgts.core.Glyph
 import com.wdgts.core.Prefs
+import com.wdgts.hud.engine.Block
+import com.wdgts.hud.engine.GlyphToken
+import com.wdgts.hud.engine.HudBlocks
+import com.wdgts.hud.engine.HudGlyph
+import com.wdgts.hud.engine.HudRules
+import com.wdgts.hud.engine.Icon
+import com.wdgts.hud.engine.OutlinePill
+import com.wdgts.hud.engine.TapRef
+import com.wdgts.hud.engine.Text
+import com.wdgts.hud.engine.Timer
+import com.wdgts.hud.engine.Token
 import com.wdgts.music.MusicState
 import com.wdgts.panchang.Astro
 import com.wdgts.panchang.Panchang
@@ -20,11 +34,12 @@ import java.util.Locale
 /**
  * What the HUD can say, most urgent first. Everything here comes from the device or the widgets' own data:
  * missed calls, look-away reminder, torch, greeting, tap-to-pay, live score, next event, next alarm,
- * music, sunrise/sunset, countdown, tithi. (A Smartspacer source would feed this same list.)
+ * music, sunrise/sunset, countdown, tithi. [blocks] turns this list into what the HUD engine draws, and takes
+ * Smartspacer blocks as [extra].
  */
 object HudItems {
     enum class Action { NONE, CALLS, WALLET, CALENDAR, ALARMS, MUSIC, DISMISS_LOOK, SCORE, DRIK, SETTINGS }
-    data class Item(val glyph: Glyph, val text: String, val sub: String? = null, val action: Action = Action.NONE, val arrow: Boolean = false)
+    data class Item(val glyph: Glyph, val text: String, val sub: String? = null, val action: Action = Action.NONE, val arrow: Boolean = false, val ambient: Boolean = false)
 
     private val hm = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
 
@@ -89,14 +104,97 @@ object HudItems {
             now < set -> Triple(Glyph.SUN_DOWN, "SUNSET", set)
             else -> Triple(Glyph.SUN_UP, "SUNRISE", riseTomorrow)
         }
-        out += Item(gl, "$label · ${hm.format(ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(at), zone))}")
+        out += Item(gl, "$label · ${hm.format(ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(at), zone))}", ambient = true)
 
-        Countdown.span(c).let { sp -> if (sp.left in 0..60) out += Item(Glyph.CAL, "COUNTDOWN · ${sp.left}D", action = Action.SETTINGS) }
+        Countdown.span(c).let { sp -> if (sp.left in 0..60) out += Item(Glyph.CAL, "COUNTDOWN · ${sp.left}D", action = Action.SETTINGS, ambient = true) }
 
         runCatching {
             val d = Panchang.compute(today, zone, lat, lon, Prefs.purnimanta(c))
-            out += Item(Glyph.MOON, "${if (d.paksha == Paksha.KRISHNA) "KP" else "SP"} ${d.pakshaDay} · ${d.month.uppercase()}", action = Action.DRIK)
+            out += Item(Glyph.MOON, "${if (d.paksha == Paksha.KRISHNA) "KP" else "SP"} ${d.pakshaDay} · ${d.month.uppercase()}", action = Action.DRIK, ambient = true)
         }
         return out
+    }
+
+    // ---------------------------------------------------------------- engine blocks
+
+    /** TapRef.targetId for taps that map to a [Action]. */
+    const val LOCAL = "local"
+
+    private fun tapOf(a: Action): TapRef? = if (a == Action.NONE) null else TapRef(LOCAL, a.name)
+
+    /**
+     * Everything the HUD can show, ranked: weather (pinned to the first dynamic line), the urgent local items,
+     * then [extra] (Smartspacer), then the ambient local items (sunrise/sunset, countdown, tithi), then the low
+     * priority battery warning and notification chips. The engine fits as many as there are lines.
+     * A Smartspacer weather block replaces the local one, and a Smartspacer calendar target replaces the local event.
+     */
+    fun blocks(c: Context, extra: List<Block> = emptyList()): List<Block> {
+        val out = ArrayList<Block>()
+        if (extra.none { it.pinLine == 0 }) weather(c)?.let { out += it }
+        val skipCalendar = extra.any { it.kind == "calendar" }
+        val items = build(c).filterNot { skipCalendar && it.glyph == Glyph.CAL && it.action == Action.CALENDAR }
+        items.filterNot { it.ambient }.forEachIndexed { n, item -> out += block(item, n) }
+        out += extra
+        items.filter { it.ambient }.forEachIndexed { n, item -> out += block(item, 100 + n) }
+        battery(c)?.let { out += it }
+        chips(c)?.let { out += it }
+        return out
+    }
+
+    /** 🗣 TITLE [→] / STARTING ✌🖐 ⌊7MIN */
+    private fun block(i: Item, n: Int): Block {
+        val tap = tapOf(i.action)
+        val first = ArrayList<Token>()
+        first += Icon(i.glyph, tap)
+        first += Text(i.text, tap)
+        if (i.arrow) first += GlyphToken(HudGlyph.FOLLOWUP, tap)
+        val segs = ArrayList<List<Token>>()
+        segs += first
+        i.sub?.let { s ->
+            val tokens = ArrayList<Token>()
+            val minutes = HudRules.exactMinutes(s)
+            if (minutes != null) {
+                if (i.glyph == Glyph.CAL) tokens += Text("STARTING", tap)
+                HudRules.hands(minutes).forEach { tokens += GlyphToken(it, tap) }
+                tokens += Timer(s.uppercase(), tap)
+            } else if (HudRules.isDuration(s)) {
+                tokens += Timer(s.uppercase(), tap)
+            } else {
+                tokens += Text(s, tap)
+            }
+            segs += tokens
+        }
+        return Block("item$n", segs)
+    }
+
+    private fun weather(c: Context): Block? {
+        val (t, word, _) = Prefs.weather(c) ?: return null
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val lat = Prefs.lat(c); val lon = Prefs.lon(c)
+        val now = System.currentTimeMillis()
+        val night = now < Astro.sunriseMs(today, zone, lat, lon) || now >= Astro.sunsetMs(today, zone, lat, lon)
+        return HudBlocks.weather(t, celsius = true, word = word, glyph = HudRules.glyphForWord(word, night))
+    }
+
+    private fun battery(c: Context): Block? {
+        val bi = c.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null
+        val level = bi.getIntExtra(BatteryManager.EXTRA_LEVEL, 0)
+        val scale = bi.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+        val status = bi.getIntExtra(BatteryManager.EXTRA_STATUS, 0)
+        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING
+        val pct = level * 100 / scale
+        if (pct > 20 && !charging) return null
+        return Block("battery", listOf(listOf(Text(if (charging) "CHARGING" else "BATTERY LOW"), OutlinePill("$pct%"))))
+    }
+
+    private fun chips(c: Context): Block? {
+        val counts = listOf(
+            "WA" to (HudSignals.counts["com.whatsapp"] ?: 0),
+            "IG" to (HudSignals.counts["com.instagram.android"] ?: 0),
+            "SMS" to HudSignals.smsCount(c),
+        ).filter { it.second > 0 }
+        if (counts.isEmpty()) return null
+        return Block("chips", listOf(counts.map { (name, n) -> OutlinePill("$name $n") }))
     }
 }
