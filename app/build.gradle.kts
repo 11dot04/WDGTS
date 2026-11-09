@@ -22,7 +22,12 @@ android {
     }
 }
 
-kotlin { jvmToolchain(17) }
+kotlin {
+    jvmToolchain(17)
+    // Fallback only: if the root build still compiles with Kotlin 2.2 and you can't raise it, uncomment this so the
+    // compiler accepts the Smartspacer SDK's Kotlin 2.4 metadata. Not needed once Kotlin is 2.4.0.
+    // compilerOptions { freeCompilerArgs.add("-Xskip-metadata-version-check") }
+}
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")   // PathParser for KanjiVG stroke paths
@@ -31,9 +36,10 @@ dependencies {
     // Real M3 Expressive wavy progress indicators (Views), drawn offscreen onto widget bitmaps.
     // Dynamic on purpose: pin the newest 1.14.x/1.15 you see on Maven once it builds.
     implementation("com.google.android.material:material:1.14.+")
+    // HUD: Smartspacer targets. The SDK is built with Kotlin 2.4, so the build's Kotlin must be 2.4.0 too.
     implementation("com.kieronquinn.smartspacer:sdk-client:1.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:")
-    testImplementation("junit:junit:4.13.2") // only for the test file minSdk must be 26 or higher.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    testImplementation("junit:junit:4.13.2") // only for the HUD logic test
     // ML Kit subject segmentation (via Google Play services) for the depth-effect music widget
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
 }
