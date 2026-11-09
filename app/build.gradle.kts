@@ -31,6 +31,9 @@ dependencies {
     // Real M3 Expressive wavy progress indicators (Views), drawn offscreen onto widget bitmaps.
     // Dynamic on purpose: pin the newest 1.14.x/1.15 you see on Maven once it builds.
     implementation("com.google.android.material:material:1.14.+")
+    implementation("com.kieronquinn.smartspacer:sdk-client:1.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:")
+    testImplementation("junit:junit:4.13.2") // only for the test file minSdk must be 26 or higher.
     // ML Kit subject segmentation (via Google Play services) for the depth-effect music widget
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
 }
