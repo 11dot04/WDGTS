@@ -16,10 +16,18 @@ import android.widget.TextView
 import android.widget.Toast
 import com.wdgts.core.Fonts
 import com.wdgts.core.Prefs
+import com.wdgts.hud.HudWidget
+import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
+import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource.Access
 import com.wdgts.widgets.STREAKS
 import com.wdgts.widgets.Streaks
 import com.wdgts.widgets.refreshEverything
 import java.time.LocalDate
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /** Plain, dependency-free settings screen. Opens from the launcher icon. */
 class SettingsActivity : Activity() {
@@ -27,6 +35,10 @@ class SettingsActivity : Activity() {
         val def: com.wdgts.widgets.StreakDef,
         val count: EditText, val shields: EditText, val earn: EditText, val cap: EditText, val grace: EditText, val reset: Switch,
     )
+
+    private lateinit var ssStatus: TextView
+    private lateinit var ssButton: Button
+    private val ui = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,8 +57,10 @@ class SettingsActivity : Activity() {
         header("Fonts")
         val gsf = runCatching { assets.open("fonts/display.ttf").close(); true }.getOrDefault(false)
         val rf = runCatching { assets.open("fonts/roboto_flex.ttf").close(); true }.getOrDefault(false)
+        val gm = runCatching { assets.list("fonts").orEmpty().any { it.contains("geist", true) && it.contains("mono", true) } }.getOrDefault(false)
         note("Google Sans Flex: ${if (gsf) "bundled" else "MISSING, using the system font"}\n" +
-            "Roboto Flex: ${if (rf) "bundled" else "MISSING, music titles use other faces"}")
+            "Roboto Flex: ${if (rf) "bundled" else "MISSING, music titles use other faces"}\n" +
+            "Geist Mono (HUD): ${if (gm) "bundled" else "MISSING, the HUD uses the app's mono font"}")
         Fonts.display(this)
         note("Axes in use: " + (Fonts.fvar ?: "none (variable font not loaded)"))
 
@@ -122,6 +136,52 @@ class SettingsActivity : Activity() {
             setOnClickListener { requestPermissions(arrayOf(Manifest.permission.READ_CALENDAR), 7) }
         })
 
+        header("Smartspacer")
+        note("The HUD also shows your Smartspacer targets (calendar, flights, commute and so on) once this app has access.")
+        ssStatus = TextView(this).apply { textSize = 12f }
+        col.addView(ssStatus)
+        ssButton = Button(this).apply {
+            text = "Grant Smartspacer access"
+            setOnClickListener { HudSmartspacerSource.requestAccess(this@SettingsActivity) }
+        }
+        col.addView(ssButton)
+
         setContentView(ScrollView(this).apply { addView(col) })
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshSmartspacer()
+    }
+
+    override fun onDestroy() {
+        ui.cancel()
+        super.onDestroy()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == HudSmartspacerSource.REQUEST_PERMISSION) {
+            HudSmartspacerSource.restart(this)
+            refreshSmartspacer()
+        }
+    }
+
+    private fun refreshSmartspacer() {
+        ui.launch {
+            val access = HudSmartspacerSource.checkAccess(this@SettingsActivity)
+            ssStatus.text = when (access) {
+                Access.NOT_INSTALLED -> "Smartspacer: not installed"
+                Access.NEEDS_PERMISSION -> "Smartspacer: installed, access not granted"
+                Access.GRANTED -> "Smartspacer: connected (${HudSmartspacerSource.targets.size} targets right now)"
+                Access.UNKNOWN -> "Smartspacer: could not reach it. Open Smartspacer once, then come back."
+            }
+            ssButton.isEnabled = access == Access.NEEDS_PERMISSION || access == Access.UNKNOWN
+            if (access == Access.GRANTED) {
+                // no-op if the session is already running
+                HudSmartspacerSource.start(applicationContext) { HudWidget().refreshAll(applicationContext) }
+            }
+        }
     }
 }
