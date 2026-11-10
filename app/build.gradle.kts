@@ -13,8 +13,28 @@ android {
         applicationId = "com.wdgts"
         minSdk = 33          // monochrome app icons, system dynamic colours
         targetSdk = 36
-        versionCode = 4
+        // CI builds count upwards by themselves, so a newer APK always installs over an older one
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0) + 100
         versionName = "0.4"
+    }
+    // One fixed key for every build, so each new APK installs over the previous one instead of needing an uninstall.
+    // The keystore is committed on purpose (see README-HUD.md, "Signing"); override the password with the
+    // WDGTS_STORE_PASSWORD gradle property or environment variable if you ever swap in a private key.
+    signingConfigs {
+        create("wdgts") {
+            val pw = providers.gradleProperty("WDGTS_STORE_PASSWORD")
+                .orElse(providers.environmentVariable("WDGTS_STORE_PASSWORD"))
+                .orElse("wdgtsdebug").get()
+            storeFile = file("signing/wdgts-debug.p12")
+            storeType = "pkcs12"
+            storePassword = pw
+            keyAlias = "wdgts"
+            keyPassword = pw
+        }
+    }
+    buildTypes {
+        getByName("debug") { signingConfig = signingConfigs.getByName("wdgts") }
+        getByName("release") { signingConfig = signingConfigs.getByName("wdgts") }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
