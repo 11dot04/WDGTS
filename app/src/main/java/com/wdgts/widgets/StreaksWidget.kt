@@ -19,6 +19,7 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
 import android.widget.RemoteViews
+import androidx.core.graphics.PathParser
 import com.wdgts.R
 import com.wdgts.core.*
 import java.time.LocalDate
@@ -105,16 +106,8 @@ class StreaksWidget : AppWidgetProvider() {
             return Bitmap.createBitmap(px, n, n, Bitmap.Config.ARGB_8888)
         }
 
-        private fun cropToAlpha(b: Bitmap): Bitmap? {
-            val w = b.width; val h = b.height
-            val px = IntArray(w * h)
-            b.getPixels(px, 0, w, 0, 0, w, h)
-            var l = w; var t = h; var r = -1; var bt = -1
-            for (y in 0 until h) for (x in 0 until w) if ((px[y * w + x] ushr 24) > 24) {
-                if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > bt) bt = y
-            }
-            return if (r < 0) null else Bitmap.createBitmap(b, l, t, r - l + 1, bt - t + 1)
-        }
+        /** Crops to the artwork but ignores stray specks (see GlyphMask.trim), so one far pixel cannot shrink a glyph. */
+        private fun cropToAlpha(b: Bitmap): Bitmap? = GlyphMask.trim(b)
 
         /** The tile glyph as an alpha mask cropped to its content, so every icon can be sized the same. */
         private fun glyph(ctx: Context, def: StreakDef): Bitmap? = glyphCache.getOrPut(def.id + AppResolver.resolve(ctx, def)) {
@@ -134,13 +127,21 @@ class StreaksWidget : AppWidgetProvider() {
             }.getOrNull()
         }
 
+        /** Material "public" globe (Apache 2.0): filled disc ring with continents, drawn in a 24-unit box. */
+        private val GLOBE: Path by lazy {
+            PathParser.createPathFromPathData(
+                "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z",
+            )
+        }
+
         private fun Canvas.globe(cx: Float, cy: Float, r: Float, color: Int) {
-            val s = Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.STROKE; it.color = color; it.strokeWidth = r * 0.16f }
-            drawCircle(cx, cy, r, s)
-            drawOval(RectF(cx - r * 0.45f, cy - r, cx + r * 0.45f, cy + r), s)
-            drawLine(cx - r, cy, cx + r, cy, s)
-            drawLine(cx - r * 0.86f, cy - r * 0.5f, cx + r * 0.86f, cy - r * 0.5f, s)
-            drawLine(cx - r * 0.86f, cy + r * 0.5f, cx + r * 0.86f, cy + r * 0.5f, s)
+            val k = (r * 2f) / 20f            // the artwork spans 2..22 of the 24-unit box
+            val fill = Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.FILL; it.color = color }
+            save()
+            translate(cx - 12f * k, cy - 12f * k)
+            scale(k, k)
+            drawPath(GLOBE, fill)
+            restore()
         }
 
         /** Draws the glyph scaled so its LONGEST side is [target] (normalises tiny layers like NYT's). */
@@ -148,7 +149,8 @@ class StreaksWidget : AppWidgetProvider() {
             if (def.web) { globe(cx, cy, target * 0.5f, color); return }
             val g = glyph(ctx, def)
             if (g != null) {
-                val s = target / maxOf(g.width, g.height)
+                // optical size: dense square art is drawn a little smaller, thin art a little larger
+                val s = target * GlyphMask.optical(GlyphMask.coverage(g)) / maxOf(g.width, g.height)
                 val dw = g.width * s; val dh = g.height * s
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).also { it.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN) }
                 drawBitmap(g, null, RectF(cx - dw / 2, cy - dh / 2, cx + dw / 2, cy + dh / 2), paint)
@@ -199,17 +201,17 @@ class StreaksWidget : AppWidgetProvider() {
                 val num = st.count.toString()
                 when {
                     cells >= 4 -> {      // big: icon top-left, light-weight count bottom-right
-                        icon(ctx, def, rect.left + 9.5f * u, rect.top + 9.5f * u, 12f * u, ink)
-                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, 13f * u, tf, wght = 270, wdthMax = 100)
+                        icon(ctx, def, rect.left + 11f * u, rect.top + 11f * u, 15f * u, ink)
+                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, 17f * u, tf, wght = 270, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.bottom - 3.4f * u, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                         if (rule.cap > 0) shield(rect.right - 6.5f * u, rect.top + 7f * u, 3.6f * u, st.shields, ink, mono)
                     }
                     cells == 2 -> {      // wide: icon left, count right
-                        icon(ctx, def, rect.left + rect.height() * 0.5f, rect.centerY(), rect.height() * 0.56f, ink)
-                        val (sz, fv) = fitByAxis(num, rect.width() * 0.5f, rect.height() * 0.5f, tf, wght = 270, wdthMax = 100)
+                        icon(ctx, def, rect.left + rect.height() * 0.52f, rect.centerY(), rect.height() * 0.64f, ink)
+                        val (sz, fv) = fitByAxis(num, rect.width() * 0.5f, rect.height() * 0.6f, tf, wght = 270, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.centerY() + sz * 0.35f, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                     }
-                    else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.52f, ink)
+                    else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.62f, ink)
                 }
             }
         }
