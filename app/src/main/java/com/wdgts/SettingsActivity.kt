@@ -2,6 +2,8 @@ package com.wdgts
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
@@ -16,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.wdgts.core.Fonts
 import com.wdgts.core.Prefs
+import com.wdgts.hud.HudPrefs
 import com.wdgts.hud.HudWidget
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource.Access
@@ -145,6 +148,33 @@ class SettingsActivity : Activity() {
             setOnClickListener { HudSmartspacerSource.requestAccess(this@SettingsActivity) }
         }
         col.addView(ssButton)
+        col.addView(Button(this).apply {
+            text = "Copy Smartspacer targets (for debugging)"
+            setOnClickListener {
+                val dump = HudSmartspacerSource.dump()
+                getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Smartspacer targets", dump))
+                android.widget.Toast.makeText(this@SettingsActivity, "Copied ${dump.length} characters", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        header("HUD")
+        note("A sun or moon between the month and the time, like the AM/PM marker on the Nothing clock. Off by default, also on 24-hour clocks.")
+        col.addView(android.widget.CheckBox(this).apply {
+            text = "Day/night glyph"
+            isChecked = HudPrefs.dayNightGlyph(this@SettingsActivity)
+            setOnCheckedChangeListener { _, on ->
+                HudPrefs.setDayNightGlyph(this@SettingsActivity, on)
+                HudWidget().refreshAll(applicationContext)
+            }
+        })
+        col.addView(android.widget.CheckBox(this).apply {
+            text = "Switch at sunrise and sunset (instead of 06:00 and 18:00)"
+            isChecked = HudPrefs.dayNightBySun(this@SettingsActivity)
+            setOnCheckedChangeListener { _, on ->
+                HudPrefs.setDayNightBySun(this@SettingsActivity, on)
+                HudWidget().refreshAll(applicationContext)
+            }
+        })
 
         setContentView(ScrollView(this).apply { addView(col) })
     }
