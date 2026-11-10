@@ -41,6 +41,8 @@ class GlyphRegistry(context: Context, private val dir: String = "glyphs") {
             HudGlyph.TEMP_100_80 to (7f to 9f), HudGlyph.TEMP_70_60 to (7f to 9f),
             HudGlyph.TEMP_50_30 to (7f to 9f), HudGlyph.TEMP_20_10 to (7f to 9f),
             HudGlyph.TEMP_9_0 to (7f to 9f),
+            HudGlyph.EYE to (10.4f to Hud.PILL_H), HudGlyph.PHONE to (10.4f to Hud.PILL_H),
+            HudGlyph.CALENDAR to (10f to Hud.PILL_H), HudGlyph.MOON_DISC to (10.4f to Hud.PILL_H),
             HudGlyph.UNIT_F to (11f to 11f), HudGlyph.UNIT_C to (11f to 11f), HudGlyph.UNIT_K to (11f to 11f),
         )
     }

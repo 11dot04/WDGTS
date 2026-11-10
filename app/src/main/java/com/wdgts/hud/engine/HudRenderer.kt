@@ -8,13 +8,12 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
-import kotlin.math.min
 
 class HudColors(val ink: Int)
 
-/** Lets the host app draw its own icons (anything without an SVG yet). Draw centered on [cy], left edge at [x]. */
+/** Lets the host app draw icons the engine has no SVG for (app icons). Draw inside a [size] square, left edge at [x], centered on [cy]. */
 fun interface IconPainter {
-    fun paint(key: Any, c: Canvas, x: Float, cy: Float, unit: Float, ink: Int)
+    fun paint(key: Any, c: Canvas, x: Float, cy: Float, size: Float, ink: Int)
 }
 
 /**
@@ -60,15 +59,18 @@ class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight:
     private val packer = LinePacker(flow)
 
     fun draw(c: Canvas, widthPx: Int, heightPx: Int, content: HudContent, colors: HudColors, icons: IconPainter? = null) {
-        val unit = min(widthPx / Hud.WIDTH_UNITS, heightPx / Hud.HEIGHT_UNITS)
+        val size = HudSizing.of(widthPx, heightPx)
+        val unit = size.unit
         val maxW = widthPx / unit - 2 * Hud.PAD_H
 
-        val lines = ArrayList<List<Placed>>(Hud.LINES)
-        lines += flow.layout(content.header, maxW, 1).firstOrNull() ?: emptyList()
-        lines += packer.pack(content.blocks, Hud.BODY_LINES, maxW)
+        val lines = ArrayList<List<Placed>>(size.lines)
+        val withExtra = content.header + content.headerExtra
+        val headerLine = if (content.headerExtra.isNotEmpty()) flow.layout(withExtra, maxW, 2).takeIf { it.size == 1 } else null
+        lines += (headerLine ?: flow.layout(content.header, maxW, 1)).firstOrNull() ?: emptyList()
+        lines += packer.pack(content.blocks, size.bodyLines, maxW)
 
         val pitch = Hud.LINE_PITCH * unit
-        val top0 = (heightPx - Hud.LINES * pitch) / 2f
+        val top0 = Hud.PAD_V * unit   // anchored to the top
         lines.forEachIndexed { i, line ->
             val cy = top0 + i * pitch + pitch / 2f
             for (p in line) draw(c, p.token, (Hud.PAD_H + p.x) * unit, cy, p.w * unit, unit, colors.ink, icons)
@@ -100,7 +102,24 @@ class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight:
                 stroke.color = ink
                 g.draw(c, x, cy - g.height * u / 2f, u, fill, stroke)
             }
-            is Icon -> icons?.paint(t.key, c, x, cy, u, ink)
+            is Icon -> icons?.paint(t.key, c, x, cy, Hud.ICON_W * u, ink)
+            is Chip -> {
+                outlineShape(c, x, cy, w, u, ink)
+                icons?.paint(t.icon, c, x + Hud.CHIP_PAD_L * u, cy, Hud.CHIP_ICON * u, ink)
+                text.textSize = size(Hud.PILL_CAP, u)
+                text.color = ink
+                c.drawText(t.text, x + (Hud.CHIP_PAD_L + Hud.CHIP_ICON + Hud.CHIP_GAP) * u, cy + Hud.PILL_CAP * u / 2f, text)
+            }
+            is DotRow -> {
+                val d = Hud.DOT * u
+                stroke.strokeWidth = Hud.STROKE * u
+                stroke.color = ink
+                fill.color = ink
+                for (n in 0 until t.total) {
+                    val cx = x + n * (Hud.DOT + Hud.DOT_GAP) * u + d / 2f
+                    if (n < t.done) c.drawCircle(cx, cy, d / 2f, fill) else c.drawCircle(cx, cy, (d - Hud.STROKE * u) / 2f, stroke)
+                }
+            }
             is Timer -> {
                 val s = Hud.STROKE * u
                 stroke.strokeWidth = s
@@ -128,13 +147,17 @@ class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight:
         }
     }
 
-    private fun outline(c: Canvas, label: String, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
+    private fun outlineShape(c: Canvas, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
         val ph = Hud.PILL_H * u
         val s = Hud.STROKE * u
         stroke.strokeWidth = s
         stroke.color = ink
         val r = RectF(x + s / 2f, cy - ph / 2f + s / 2f, x + w - s / 2f, cy + ph / 2f - s / 2f)
         c.drawRoundRect(r, r.height() / 2f, r.height() / 2f, stroke)
+    }
+
+    private fun outline(c: Canvas, label: String, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
+        outlineShape(c, x, cy, w, u, ink)
         text.textSize = size(Hud.PILL_CAP, u)
         text.color = ink
         c.drawText(label, x + (w - text.measureText(label)) / 2f, cy + Hud.PILL_CAP * u / 2f, text)

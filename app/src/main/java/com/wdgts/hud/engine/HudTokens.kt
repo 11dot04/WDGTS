@@ -1,6 +1,6 @@
 package com.wdgts.hud.engine
 
-/** Identifies what a tap should fire. targetId "local" = a HudItems.Action name; anything else = a Smartspacer target. */
+/** Identifies what a tap should fire. targetId "local" = one of the HudSources action ids; anything else = a Smartspacer target. */
 data class TapRef(val targetId: String, val actionId: String?)
 
 /** Every SVG the HUD draws; [res] is the file name (no extension) under assets/glyphs/. */
@@ -18,7 +18,10 @@ enum class HudGlyph(val res: String) {
     TEMP_100_80("hud_temp_100_80"), TEMP_70_60("hud_temp_70_60"), TEMP_50_30("hud_temp_50_30"),
     TEMP_20_10("hud_temp_20_10"), TEMP_9_0("hud_temp_9_0"),
 
-    UNIT_F("hud_unit_f"), UNIT_C("hud_unit_c"), UNIT_K("hud_unit_k");
+    UNIT_F("hud_unit_f"), UNIT_C("hud_unit_c"), UNIT_K("hud_unit_k"),
+
+    EYE("hud_eye"), PHONE("hud_phone"), CALENDAR("hud_calendar"), MOON_DISC("hud_moon_disc"),
+    MUSIC_NOTE("hud_music_note"), USB_C("hud_usb_c");
 
     val isHand get() = name.startsWith("HAND_")
     val isUnit get() = name.startsWith("UNIT_")
@@ -48,6 +51,12 @@ data class GlyphToken(val glyph: HudGlyph, override val tap: TapRef? = null) : T
 /** An icon drawn by the host app through [IconPainter] (for icons that have no SVG yet). */
 data class Icon(val key: Any, override val tap: TapRef? = null) : Token
 
+/** Outlined pill with a leading icon drawn by the host app (e.g. a messaging app's monochrome icon) and a short text. */
+data class Chip(val icon: Any, val text: String, override val tap: TapRef? = null) : Token
+
+/** A row of dots: [done] filled, the rest outlined (progress such as streaks). */
+data class DotRow(val done: Int, val total: Int, override val tap: TapRef? = null) : Token
+
 /** Rounded corner bracket + underline with text above it (the "7MIN" countdown). */
 data class Timer(val text: String, override val tap: TapRef? = null) : Token
 
@@ -67,6 +76,21 @@ data class Block(
     val pinLine: Int? = null,
     /** Optional tag used to de-duplicate sources, e.g. "calendar". */
     val kind: String? = null,
+    /** A headline block (e.g. the morning greeting) may take over the header line while it is relevant. */
+    val headline: Boolean = false,
+    /** Ambient blocks never use the fifth line; they only get the first [Hud.AMBIENT_BODY_LINES] body lines. */
+    val optional: Boolean = false,
+    /** A one-line version used when only one line is left, e.g. TITLE — SUBTITLE [→] instead of dropping the subtitle. */
+    val compact: List<Token>? = null,
 )
 
-data class HudContent(val header: List<Token>, val blocks: List<Block>)
+/**
+ * [headerExtra] is appended to the header only if the whole line still fits (the temperature chip);
+ * [headerTap] is what a tap on line 1 fires (null = settings).
+ */
+data class HudContent(
+    val header: List<Token>,
+    val blocks: List<Block>,
+    val headerExtra: List<Token> = emptyList(),
+    val headerTap: TapRef? = null,
+)

@@ -18,13 +18,24 @@ object Hud {
     const val MONTH_W = 22.291f
     const val BUBBLE_PAD_L = 5.6f
     const val BUBBLE_PAD_R = 6.0f
-    const val CURSOR_W = 4.4f
+    const val CURSOR_W = 2.4f
     const val CURSOR_H = 7.5f
     const val TIMER_LEAD = 6.2f
     const val ICON_W = 10.4f
+    const val CHIP_ICON = 6.2f
+    const val CHIP_PAD_L = 2.4f
+    const val CHIP_PAD_R = 3.2f
+    const val CHIP_GAP = 1.2f
+    const val DOT = 2.8f
+    const val DOT_GAP = 1.8f
     const val OUTLINE_PAD = 3.6f
 
     const val LINES = 4
+    /** Fewest and most lines a widget can show; the fifth only appears when the widget is tall enough. */
+    const val MIN_LINES = 4
+    const val MAX_LINES = 5
+    /** Ambient blocks (tithi, chips, ordinary weather) never use body lines past this many. */
+    const val AMBIENT_BODY_LINES = 3
     const val BODY_LINES = LINES - 1
     const val LINE_PITCH = 11.9f
     const val PAD_H = 3f

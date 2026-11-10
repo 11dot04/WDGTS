@@ -16,6 +16,8 @@ class FlowLayout(
         is OutlinePill -> m.pill(t.text) + 2 * Hud.OUTLINE_PAD
         is Bubble -> Hud.BUBBLE_PAD_L + m.pill(t.word) + Hud.BUBBLE_PAD_R
         is GlyphToken -> glyphSize(t.glyph).first
+        is Chip -> Hud.CHIP_PAD_L + Hud.CHIP_ICON + Hud.CHIP_GAP + m.pill(t.text) + Hud.CHIP_PAD_R
+        is DotRow -> t.total * Hud.DOT + (t.total - 1).coerceAtLeast(0) * Hud.DOT_GAP
         is Icon -> Hud.ICON_W
         is Timer -> Hud.TIMER_LEAD + m.body(t.text)
         is Cursor -> Hud.CURSOR_W
@@ -30,7 +32,8 @@ class FlowLayout(
         a is Text && b is GlyphToken && b.glyph.isUnit -> 0.4f
         a is Text && b is Text -> m.bodyAdv
         a is Icon && b is Text -> 2f
-        a is OutlinePill && b is OutlinePill -> 1.6f
+        (a is OutlinePill || a is Chip) && (b is OutlinePill || b is Chip) -> 1.6f
+        a is DotRow || b is DotRow -> 3f
         a is GlyphToken && b is GlyphToken && a.glyph.isHand && b.glyph.isHand -> 3.5f
         else -> 2.6f
     }
@@ -93,31 +96,34 @@ class FlowLayout(
     }
 }
 
-/** A block assigned to dynamic lines [start, start + lines). */
-class Placement(val block: Block, val start: Int, val lines: Int)
+/** A block assigned to dynamic lines [start, start + lines); [compact] = its one-line version was chosen. */
+class Placement(val block: Block, val start: Int, val lines: Int, val compact: Boolean = false)
 
 /**
  * Width-independent line planning, so tap zones can be wired in RemoteViews before any pixels exist.
- * Pinned blocks keep their line if they fit; the rest take the first free line in rank order and
- * are cut to the room left.
+ * Pinned blocks keep their line if they fit; the rest take the first free line in rank order. A block that
+ * does not fit in full uses its compact one-liner if it has one, otherwise it is cut to the room left.
+ * Optional (ambient) blocks only use the first [ambientLimit] lines.
  */
 object HudPlan {
     private fun segs(b: Block) = b.segments.filter { it.isNotEmpty() }
 
-    fun plan(blocks: List<Block>, slots: Int): List<Placement> {
+    fun plan(blocks: List<Block>, slots: Int, ambientLimit: Int = Hud.AMBIENT_BODY_LINES): List<Placement> {
         val free = BooleanArray(slots) { true }
         val out = ArrayList<Placement>()
         val placed = HashSet<String>()
 
-        fun run(from: Int): Int {
+        fun limit(b: Block) = if (b.optional) minOf(slots, ambientLimit) else slots
+
+        fun run(from: Int, lim: Int): Int {
             var n = 0
-            while (from + n < slots && free[from + n]) n++
+            while (from + n < lim && free[from + n]) n++
             return n
         }
 
-        fun take(b: Block, at: Int, n: Int) {
+        fun take(b: Block, at: Int, n: Int, compact: Boolean = false) {
             for (i in 0 until n) free[at + i] = false
-            out += Placement(b, at, n)
+            out += Placement(b, at, n, compact)
             placed += b.id
         }
 
@@ -125,14 +131,20 @@ object HudPlan {
             val pin = b.pinLine ?: continue
             val at = pin.coerceIn(0, slots - 1)
             val n = segs(b).size
-            if (n > 0 && run(at) >= n) take(b, at, n)
+            if (n > 0 && run(at, limit(b)) >= n) take(b, at, n)
         }
         for (b in blocks) {
             if (b.id in placed) continue
-            val at = (0 until slots).firstOrNull { free[it] } ?: break
+            val lim = limit(b)
+            val at = (0 until lim).firstOrNull { free[it] } ?: continue
             val n = segs(b).size
             if (n == 0) continue
-            take(b, at, minOf(n, run(at)))
+            val r = run(at, lim)
+            when {
+                n <= r -> take(b, at, n)
+                b.compact != null && r >= 1 -> take(b, at, 1, compact = true)
+                else -> take(b, at, r)
+            }
         }
         return out.sortedBy { it.start }
     }
@@ -141,6 +153,10 @@ object HudPlan {
     fun lineTaps(blocks: List<Block>, slots: Int): List<TapRef?> {
         val out = MutableList<TapRef?>(slots) { null }
         for (pl in plan(blocks, slots)) {
+            if (pl.compact) {
+                out[pl.start] = pl.block.compact?.firstNotNullOfOrNull { it.tap }
+                continue
+            }
             val s = segs(pl.block)
             for (i in 0 until pl.lines) out[pl.start + i] = s[i].firstNotNullOfOrNull { it.tap }
         }
@@ -153,6 +169,10 @@ class LinePacker(private val flow: FlowLayout) {
     fun pack(blocks: List<Block>, slots: Int, maxW: Float): List<Line> {
         val out = MutableList<Line>(slots) { emptyList() }
         for (pl in HudPlan.plan(blocks, slots)) {
+            if (pl.compact) {
+                out[pl.start] = flow.layout(pl.block.compact.orEmpty(), maxW, 1).firstOrNull() ?: emptyList()
+                continue
+            }
             val s = pl.block.segments.filter { it.isNotEmpty() }
             for (i in 0 until pl.lines) {
                 out[pl.start + i] = flow.layout(s[i], maxW, 1).firstOrNull() ?: emptyList()
