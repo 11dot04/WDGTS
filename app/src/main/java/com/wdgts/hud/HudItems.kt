@@ -174,7 +174,17 @@ object HudItems {
         val lat = Prefs.lat(c); val lon = Prefs.lon(c)
         val now = System.currentTimeMillis()
         val night = now < Astro.sunriseMs(today, zone, lat, lon) || now >= Astro.sunsetMs(today, zone, lat, lon)
-        return HudBlocks.weather(t, celsius = true, word = word, glyph = HudRules.glyphForWord(word, night))
+    
+        val look = HudRules.weatherLook(word, night)
+    
+        return HudBlocks.weather(
+            WeatherInfo(
+                temp = t,
+                celsius = true,
+                word = look?.word ?: word,
+                glyph = look?.glyph
+            )
+        )
     }
 
     private fun battery(c: Context): Block? {
