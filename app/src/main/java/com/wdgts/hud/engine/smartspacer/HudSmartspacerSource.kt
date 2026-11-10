@@ -18,6 +18,7 @@ import com.kieronquinn.app.smartspacer.sdk.model.uitemplatedata.CombinedCardsTem
 import com.kieronquinn.app.smartspacer.sdk.model.uitemplatedata.TapAction
 import com.wdgts.hud.engine.Block
 import com.wdgts.hud.engine.TapRef
+import com.wdgts.hud.engine.WeatherInfo
 import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -50,8 +51,19 @@ object HudSmartspacerSource {
     private var lastBlocks: List<Block> = emptyList()
     private var firstResult = CompletableDeferred<Unit>()
 
+    /** An empty list from Smartspacer is often a blip between two real ones; keep the last good list this long. */
+    private const val EMPTY_GRACE_MS = 120_000L
+    @Volatile private var lastNonEmptyAt = 0L
+    @Volatile private var pendingEmpty = false
+
+    private fun live(): List<SmartspaceTarget> =
+        if (pendingEmpty && System.currentTimeMillis() - lastNonEmptyAt > EMPTY_GRACE_MS) emptyList() else targets
+
     fun isInstalled(ctx: Context): Boolean =
         ctx.applicationContext.packageManager.queryIntentServices(Intent(ACTION_MANAGER), 0).isNotEmpty()
+
+    /** Call before reading: restarts the session if the process was killed since the last time. */
+    fun ensure(ctx: Context, onChange: () -> Unit) = start(ctx, onChange)
 
     /** Starts the session if Smartspacer is installed. Safe to call repeatedly; the latest [onChange] wins. */
     @Synchronized
@@ -76,7 +88,17 @@ object HudSmartspacerSource {
         s.launch {
             h.targets.collect { list ->
                 access = Access.GRANTED
-                targets = list
+                val now = System.currentTimeMillis()
+                if (list.isNotEmpty()) {
+                    targets = list
+                    lastNonEmptyAt = now
+                    pendingEmpty = false
+                } else if (now - lastNonEmptyAt > EMPTY_GRACE_MS) {
+                    targets = emptyList()
+                    pendingEmpty = false
+                } else {
+                    pendingEmpty = true
+                }
                 firstResult.complete(Unit)
                 notifyIfChanged(app)
             }
@@ -92,7 +114,6 @@ object HudSmartspacerSource {
         scope?.cancel()
         helper = null
         scope = null
-        targets = emptyList()
         lastBlocks = emptyList()
         firstResult = CompletableDeferred()
         SmartspacerClient.close()
@@ -110,18 +131,58 @@ object HudSmartspacerSource {
     }
 
     private fun notifyIfChanged(ctx: Context) {
-        val b = mapper.blocks(targets, redactSensitive = false)
-        if (b != lastBlocks) {
-            lastBlocks = b
+        val b = listOfNotNull(mapper.top(targets, redactSensitive = false))
+        val w = mapper.weather(targets)
+        val sig = b + listOf(Block("w:" + w?.temp + w?.word, emptyList()))
+        if (sig != lastBlocks) {
+            lastBlocks = sig
             onChange?.invoke()
         }
     }
 
-    /** HUD blocks for the current targets; sensitive text is masked while the device is locked. */
-    fun blocks(ctx: Context): List<Block> {
-        if (targets.isEmpty()) return emptyList()
+    /** The weather Smartspacer carries, if any. */
+    fun weather(): WeatherInfo? = mapper.weather(live())
+
+    /** The topmost usable target as a block; sensitive text is masked while the device is locked. */
+    fun top(ctx: Context): Block? {
+        val ts = live()
+        if (ts.isEmpty()) return null
         val locked = ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        return mapper.blocks(targets, redactSensitive = locked)
+        return mapper.top(ts, redactSensitive = locked)
+    }
+
+    /** A readable dump of every live target (copy it from Settings) so the mapping can be checked against real data. */
+    fun dump(): String = buildString {
+        val ts = targets
+        appendLine("Smartspacer targets: ${ts.size}, access=$access")
+        ts.forEachIndexed { i, t ->
+            appendLine("#$i id=${t.smartspaceTargetId}")
+            appendLine("  component=${t.componentName.flattenToShortString()} feature=${t.featureType} score=${t.score}" +
+                " dismissable=${t.canBeDismissed} twoComplications=${t.canTakeTwoComplications} hideIfNoComplications=${t.hideIfNoComplications} sensitive=${t.isSensitive}")
+            appendLine("  widget=${t.widget != null} remoteViews=${t.remoteViews != null} template=${t.templateData?.javaClass?.simpleName} expiry=${t.expiryTimeMillis}")
+            fun act(name: String, a: SmartspaceAction?) {
+                if (a == null) return
+                val wd = a.weatherData?.let { "${it.state} ${it.temperature}${if (it.useCelsius) "C" else "F"} '${it.description}'" }
+                val src = a.subItemInfo?.loggingInfo?.let { "${it.packageName}/${it.featureType}" }
+                appendLine("  $name id=${a.id} title='${a.title}' subtitle='${a.subtitle}' icon=${a.icon != null} tap=${a.intent != null || a.pendingIntent != null} weather=$wd source=$src")
+            }
+            act("header", t.headerAction)
+            act("base", t.baseAction)
+            t.actionChips.forEach { act("chip", it) }
+            t.iconGrid.forEach { act("grid", it) }
+            t.templateData?.let { d ->
+                listOf(
+                    "primary" to d.primaryItem, "subtitle" to d.subtitleItem,
+                    "subtitleSupplemental" to d.subtitleSupplementalItem,
+                    "supplementalLine" to d.supplementalLineItem, "supplementalAlarm" to d.supplementalAlarmItem,
+                ).forEach { (name, item) ->
+                    if (item != null) {
+                        val ic = item.icon
+                        appendLine("  $name text='${item.text?.text}' icon=${ic != null} tint=${ic?.shouldTint} desc='${ic?.contentDescription}' tap=${item.tapAction?.id} source=${item.loggingInfo?.let { "${it.packageName}/${it.featureType}" }}")
+                    }
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------------ access
