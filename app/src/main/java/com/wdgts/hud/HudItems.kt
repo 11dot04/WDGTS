@@ -18,6 +18,7 @@ import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.Text
 import com.wdgts.hud.engine.Timer
 import com.wdgts.hud.engine.Token
+import com.wdgts.hud.engine.WeatherInfo
 import com.wdgts.music.MusicState
 import com.wdgts.panchang.Astro
 import com.wdgts.panchang.Panchang
