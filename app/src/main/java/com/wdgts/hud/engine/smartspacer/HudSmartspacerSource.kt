@@ -100,6 +100,7 @@ object HudSmartspacerSource {
                     pendingEmpty = true
                 }
                 firstResult.complete(Unit)
+                runCatching { SmartspacerIcons.preload(app, targets) }   // icons first, so the next draw already has them
                 notifyIfChanged(app)
             }
         }
@@ -144,11 +145,11 @@ object HudSmartspacerSource {
     fun weather(): WeatherInfo? = mapper.weather(live())
 
     /** The topmost usable target as a block; sensitive text is masked while the device is locked. */
-    fun top(ctx: Context): Block? {
+    fun top(ctx: Context, skip: (Block) -> Boolean = { false }): Block? {
         val ts = live()
         if (ts.isEmpty()) return null
         val locked = ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        return mapper.top(ts, redactSensitive = locked)
+        return mapper.top(ts, redactSensitive = locked, skip = skip)
     }
 
     /** A readable dump of every live target (copy it from Settings) so the mapping can be checked against real data. */

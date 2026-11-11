@@ -12,51 +12,57 @@ import com.kieronquinn.app.smartspacer.sdk.model.uitemplatedata.TapAction
 import com.kieronquinn.app.smartspacer.sdk.model.weather.WeatherData
 import com.kieronquinn.app.smartspacer.sdk.model.weather.WeatherData.WeatherStateIcon
 import com.wdgts.hud.engine.Block
-import com.wdgts.hud.engine.OutlinePill
 import com.wdgts.hud.engine.GlyphToken
 import com.wdgts.hud.engine.Hud
-import com.wdgts.hud.engine.WeatherInfo
 import com.wdgts.hud.engine.HudGlyph
 import com.wdgts.hud.engine.HudRules
+import com.wdgts.hud.engine.Icon
+import com.wdgts.hud.engine.IconPill
+import com.wdgts.hud.engine.OutlinePill
+import com.wdgts.hud.engine.Space
 import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.Text
 import com.wdgts.hud.engine.Timer
 import com.wdgts.hud.engine.Token
+import com.wdgts.hud.engine.WeatherInfo
 import java.time.LocalTime
 import java.util.Locale
 
 /**
  * Smartspacer targets -> HUD blocks. Needs com.kieronquinn.smartspacer:sdk-client:1.2.
  * Nothing in the rest of the engine depends on this file, so it can be added later.
+ *
+ * Grammar: a target is a title line (lead glyph, title, arrow) and a subtitle line (its icon, the subtitle or a
+ * countdown, then the complications). Every complication is a pair, [icon pill][value pill], so a stray value
+ * such as a sunset time can never be mistaken for part of the event.
  */
 @SuppressLint("RestrictedApi")
 class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
 
-    class WeatherLook(val glyph: HudGlyph, val word: String)
+    class WeatherLook(val glyphs: List<HudGlyph>, val word: String)
 
     fun weatherLook(s: WeatherStateIcon): WeatherLook? = when (s) {
         WeatherStateIcon.UNKNOWN_ICON -> null
-        WeatherStateIcon.SUNNY, WeatherStateIcon.MOSTLY_SUNNY -> WeatherLook(HudGlyph.SUN, "SUNNY")
-        WeatherStateIcon.CLEAR_NIGHT, WeatherStateIcon.MOSTLY_CLEAR_NIGHT -> WeatherLook(HudGlyph.MOON, "CLEAR")
-        WeatherStateIcon.PARTLY_CLOUDY, WeatherStateIcon.PARTLY_CLOUDY_NIGHT,
-        WeatherStateIcon.MOSTLY_CLOUDY_DAY, WeatherStateIcon.MOSTLY_CLOUDY_NIGHT,
-        WeatherStateIcon.CLOUDY -> WeatherLook(HudGlyph.CLOUD, "CLOUDY")
-        WeatherStateIcon.HAZE_FOG_DUST_SMOKE -> WeatherLook(HudGlyph.HAZE, "HAZE")
-        WeatherStateIcon.DRIZZLE -> WeatherLook(HudGlyph.RAIN, "RAIN")
-        WeatherStateIcon.HEAVY_RAIN, WeatherStateIcon.SHOWERS_RAIN,
-        WeatherStateIcon.SCATTERED_SHOWERS_DAY, WeatherStateIcon.SCATTERED_SHOWERS_NIGHT -> WeatherLook(HudGlyph.RAIN, "RAIN")
+        WeatherStateIcon.SUNNY, WeatherStateIcon.MOSTLY_SUNNY -> WeatherLook(listOf(HudGlyph.SUN), "SUNNY")
+        WeatherStateIcon.CLEAR_NIGHT, WeatherStateIcon.MOSTLY_CLEAR_NIGHT -> WeatherLook(listOf(HudGlyph.MOON), "CLEAR NIGHT")
+        WeatherStateIcon.PARTLY_CLOUDY -> WeatherLook(listOf(HudGlyph.SUN, HudGlyph.CLOUD), "PARTLY SUNNY")
+        WeatherStateIcon.PARTLY_CLOUDY_NIGHT, WeatherStateIcon.MOSTLY_CLOUDY_NIGHT ->
+            WeatherLook(listOf(HudGlyph.MOON, HudGlyph.CLOUD), "CLOUDY NIGHT")
+        WeatherStateIcon.MOSTLY_CLOUDY_DAY, WeatherStateIcon.CLOUDY -> WeatherLook(listOf(HudGlyph.CLOUD), "CLOUDY")
+        WeatherStateIcon.HAZE_FOG_DUST_SMOKE -> WeatherLook(listOf(HudGlyph.HAZE), "HAZE")
+        WeatherStateIcon.DRIZZLE, WeatherStateIcon.HEAVY_RAIN, WeatherStateIcon.SHOWERS_RAIN,
+        WeatherStateIcon.SCATTERED_SHOWERS_DAY, WeatherStateIcon.SCATTERED_SHOWERS_NIGHT -> WeatherLook(listOf(HudGlyph.RAIN), "RAIN")
         WeatherStateIcon.ISOLATED_SCATTERED_TSTORMS_DAY,
-        WeatherStateIcon.ISOLATED_SCATTERED_TSTORMS_NIGHT -> WeatherLook(HudGlyph.THUNDER, "THUNDER")
-        WeatherStateIcon.STRONG_TSTORMS -> WeatherLook(HudGlyph.STORM, "STORM")
+        WeatherStateIcon.ISOLATED_SCATTERED_TSTORMS_NIGHT -> WeatherLook(listOf(HudGlyph.THUNDER), "THUNDER")
+        WeatherStateIcon.STRONG_TSTORMS -> WeatherLook(listOf(HudGlyph.STORM), "STORM")
         WeatherStateIcon.BLIZZARD, WeatherStateIcon.BLOWING_SNOW, WeatherStateIcon.FLURRIES,
         WeatherStateIcon.HEAVY_SNOW, WeatherStateIcon.SCATTERED_SNOW_SHOWERS_DAY,
         WeatherStateIcon.SCATTERED_SNOW_SHOWERS_NIGHT, WeatherStateIcon.SNOW_SHOWERS_SNOW,
-        WeatherStateIcon.WINTRY_MIX_RAIN_SNOW -> WeatherLook(HudGlyph.SNOW, "SNOW")
-        WeatherStateIcon.MIXED_RAIN_HAIL_RAIN_SLEET -> WeatherLook(HudGlyph.HAIL, "HAIL")
-        WeatherStateIcon.SLEET_HAIL -> WeatherLook(HudGlyph.HAIL, "HAIL")
-        WeatherStateIcon.TORNADO -> WeatherLook(HudGlyph.TORNADO, "TORNADO")
-        WeatherStateIcon.TROPICAL_STORM_HURRICANE -> WeatherLook(HudGlyph.HURRICANE, "HURRICANE")
-        WeatherStateIcon.WINDY_BREEZY -> WeatherLook(HudGlyph.BREEZY, "BREEZY")
+        WeatherStateIcon.WINTRY_MIX_RAIN_SNOW -> WeatherLook(listOf(HudGlyph.SNOW), "SNOW")
+        WeatherStateIcon.MIXED_RAIN_HAIL_RAIN_SLEET, WeatherStateIcon.SLEET_HAIL -> WeatherLook(listOf(HudGlyph.HAIL), "HAIL")
+        WeatherStateIcon.TORNADO -> WeatherLook(listOf(HudGlyph.TORNADO), "TORNADO")
+        WeatherStateIcon.TROPICAL_STORM_HURRICANE -> WeatherLook(listOf(HudGlyph.HURRICANE), "HURRICANE")
+        WeatherStateIcon.WINDY_BREEZY -> WeatherLook(listOf(HudGlyph.BREEZY), "BREEZY")
     }
 
     /** The weather from whichever target carries weather data. */
@@ -64,15 +70,16 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         val t = targets.firstOrNull { weatherData(it) != null } ?: return null
         val w = weatherData(t) ?: return null
         val look = weatherLook(w.state)
-        return WeatherInfo(w.temperature, w.useCelsius, look?.word, look?.glyph, tapOf(t, t.baseAction ?: t.headerAction))
+        return WeatherInfo(w.temperature, w.useCelsius, look?.word, look?.glyphs.orEmpty(), tapOf(t, t.baseAction ?: t.headerAction))
     }
 
     /**
      * The single topmost usable target. Widget targets, remote-view targets and Smartspacer's
      * "Widgets not supported" fallback are skipped, and so is anything that only carries weather.
+     * [skip] lets the caller drop more (a greeting outside its window, a music target we replace with our own).
      */
-    fun top(targets: List<SmartspaceTarget>, redactSensitive: Boolean): Block? =
-        targets.asSequence().mapNotNull { block(it, redactSensitive) }.firstOrNull()
+    fun top(targets: List<SmartspaceTarget>, redactSensitive: Boolean, skip: (Block) -> Boolean = { false }): Block? =
+        targets.asSequence().mapNotNull { block(it, redactSensitive) }.firstOrNull { !skip(it) }
 
     private val WIDGET_FALLBACK = Regex("""(?i)widgets?\s+(are\s+)?not\s+supported""")
 
@@ -97,28 +104,27 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         val d = t.templateData
         if (d != null) collect(t, d, hide, segments) else legacy(t, hide, segments)
         if (segments.isEmpty()) return null
-        val compact = compactLine(t, segments, hide)
         val kind = if (t.featureType == SmartspaceTarget.FEATURE_CALENDAR) "calendar" else null
         val first = (segments.firstOrNull()?.firstOrNull { it is Text } as? Text)?.text.orEmpty()
         return Block(
             t.smartspaceTargetId, segments.take(Hud.BODY_LINES), kind = kind,
             headline = !hide && HudRules.isGreeting(first),
-            compact = compact,
+            compact = compactLine(segments),
         )
     }
 
-    /** TITLE — SUBTITLE [→] when there is only one line to give; null when the subtitle is not plain text. */
-    private fun compactLine(t: SmartspaceTarget, segments: List<List<Token>>, hide: Boolean): List<Token>? {
+    /** TITLE ✦ SUBTITLE [→] for when only one line is left; null when the subtitle carries a countdown. */
+    private fun compactLine(segments: List<List<Token>>): List<Token>? {
         if (segments.size < 2) return null
         val title = segments[0]
         val sub = segments[1]
-        val plain = sub.firstOrNull() as? Text ?: return null
-        if (sub.any { it !is Text && it !is OutlinePill }) return null
+        if (sub.any { it is Timer || (it is GlyphToken && it.glyph.isHand) || it is IconPill }) return null
+        val plain = sub.firstOrNull { it is Text } as? Text ?: return null
         val out = ArrayList<Token>()
         out += title.filter { it !is GlyphToken || it.glyph != HudGlyph.FOLLOWUP }
-        out += Text("—")
+        out += GlyphToken(HudGlyph.STAR4)
         out += plain
-        title.firstOrNull { it is GlyphToken && it.glyph == HudGlyph.FOLLOWUP }?.let { out += it }
+        (title + sub).firstOrNull { it is GlyphToken && it.glyph == HudGlyph.FOLLOWUP }?.let { out += it }
         return out
     }
 
@@ -126,8 +132,8 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         val a = t.headerAction ?: t.baseAction ?: return
         val tap = tapOf(t, a)
         val title = a.title.trim()
-        if (title.isNotEmpty()) out += titleLine(t, txt(title, hide), tap, hasAction = tap != null)
-        a.subtitle?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { out += subtitleLine(t, it, hide, emptyList()) }
+        val sub = a.subtitle?.toString()?.trim().orEmpty()
+        build(t, title, sub, tap, null, emptyList(), hide, out)
     }
 
     /** ARSENAL 1–0 HULL CITY [→] / FINAL · 07/11 : a match fits two lines instead of three. */
@@ -152,12 +158,14 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         if (d is HeadToHeadTemplateData && headToHead(t, d, hide, out)) return
         val title = d.primaryItem?.text?.text?.toString()?.trim().orEmpty()
         val tap = tapOf(t, d.primaryItem?.tapAction)
-        if (title.isNotEmpty()) out += titleLine(t, txt(title, hide), tap, hasAction = tap != null)
-
         val sub = d.subtitleItem?.text?.text?.toString()?.trim().orEmpty()
-        val extras = listOfNotNull(d.subtitleSupplementalItem, d.supplementalLineItem, d.supplementalAlarmItem)
-            .mapNotNull { it.text?.text?.toString()?.trim()?.takeIf { s -> s.isNotEmpty() } }
-        if (sub.isNotEmpty() || extras.isNotEmpty()) out += subtitleLine(t, sub, hide, extras)
+        val tid = t.smartspaceTargetId
+        val comps = listOf("c1" to d.subtitleSupplementalItem, "c2" to d.supplementalLineItem, "c3" to d.supplementalAlarmItem)
+            .mapNotNull { (slot, item) ->
+                val text = item?.text?.text?.toString()?.trim().orEmpty()
+                if (text.isEmpty()) null else Triple(slot, text, tapOf(t, item?.tapAction))
+            }
+        build(t, title, sub, tap, "sub".takeIf { SmartspacerIcons.has(tid, "sub") }, comps, hide, out)
 
         when (d) {
             is CombinedCardsTemplateData -> d.combinedCardDataList.forEach { collect(t, it, hide, out) }
@@ -169,47 +177,64 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
                     .map { it.text.toString().trim() }.filter { it.isNotEmpty() }
                 if (parts.isNotEmpty()) out += listOf<Token>(Text(txt(parts.joinToString(" "), hide)))
             }
-            is HeadToHeadTemplateData -> {
-                val parts = listOfNotNull(d.headToHeadTitle, d.headToHeadFirstCompetitorText, d.headToHeadSecondCompetitorText)
-                    .map { it.text.toString().trim() }.filter { it.isNotEmpty() }
-                if (parts.isNotEmpty()) out += listOf<Token>(Text(txt(parts.joinToString(" "), hide)))
-            }
             else -> Unit
         }
     }
 
-    private fun leadGlyph(t: SmartspaceTarget): HudGlyph? = when (t.featureType) {
-        SmartspaceTarget.FEATURE_CALENDAR, SmartspaceTarget.FEATURE_REMINDER -> HudGlyph.SPEAK
-        else -> null
-    }
-
-    private fun titleLine(t: SmartspaceTarget, title: String, tap: TapRef?, hasAction: Boolean): List<Token> {
-        val tokens = ArrayList<Token>()
-        leadGlyph(t)?.let { tokens += GlyphToken(it, tap) }
-        tokens += Text(title, tap)
-        if (hasAction) tokens += GlyphToken(HudGlyph.FOLLOWUP, tap)
-        return tokens
-    }
-
     private fun nowMinutes(): Int = LocalTime.now().let { it.hour * 60 + it.minute }
 
-    private fun subtitleLine(t: SmartspaceTarget, sub: String, hide: Boolean, extras: List<String>): List<Token> {
-        val tokens = ArrayList<Token>()
-        val rel = if (hide) null else HudRules.countdown(sub)
-        val clock = if (hide || rel != null) null else HudRules.clockCountdown(sub, nowMinutes())
+    /** Titles longer than this push the arrow to the start of the second line, like the reference does. */
+    private val ARROW_AT_START = 19
+
+    /**
+     * The two lines of a target.
+     *  line 1: [speak glyph] TITLE [→]
+     *  line 2: [subtitle icon] SUBTITLE or STARTING IN ✌🖐 ⌊10MIN, then one [icon][value] pair per complication
+     */
+    private fun build(
+        t: SmartspaceTarget, title: String, sub: String, tap: TapRef?, subIconSlot: String?,
+        comps: List<Triple<String, String, TapRef?>>, hide: Boolean, out: MutableList<List<Token>>,
+    ) {
+        val tid = t.smartspaceTargetId
+        val rel = if (hide || sub.isEmpty()) null else HudRules.countdown(sub)
+        val clock = if (hide || sub.isEmpty() || rel != null) null else HudRules.clockCountdown(sub, nowMinutes())
         val minutes = rel?.first ?: clock
+        val timeBound = minutes != null
+        val calendarLike = t.featureType == SmartspaceTarget.FEATURE_CALENDAR || t.featureType == SmartspaceTarget.FEATURE_REMINDER
+
+        val arrowAtStart = tap != null && title.length > ARROW_AT_START
+        if (title.isNotEmpty()) {
+            val line = ArrayList<Token>()
+            if (calendarLike || timeBound) line += GlyphToken(HudGlyph.SPEAK, tap)
+            line += Text(txt(title, hide), tap)
+            if (tap != null && !arrowAtStart) line += GlyphToken(HudGlyph.FOLLOWUP, tap)
+            out += line
+        }
+
+        val line = ArrayList<Token>()
+        if (arrowAtStart) line += GlyphToken(HudGlyph.FOLLOWUP, tap)
+        if (subIconSlot != null && !hide) line += Icon(SsIconKey(tid, subIconSlot))
         if (minutes != null) {
             val rest = rel?.second.orEmpty()
-            val lead = rest.ifEmpty { if (t.featureType == SmartspaceTarget.FEATURE_CALENDAR) "STARTING" else "" }
-            if (lead.isNotEmpty()) tokens += Text(lead.uppercase(locale))
-            HudRules.hands(minutes).forEach { tokens += GlyphToken(it) }
-            tokens += Timer("${minutes}MIN")
+            val lead = when {
+                rest.isNotEmpty() -> "${rest.uppercase(locale)} IN"
+                t.featureType == SmartspaceTarget.FEATURE_CALENDAR -> "STARTING IN"
+                else -> "IN"
+            }
+            line += Text(lead)
+            HudRules.hands(minutes).forEach { line += GlyphToken(it) }
+            line += Timer("${minutes}MIN")
         } else if (sub.isNotEmpty()) {
-            tokens += Text(txt(sub, hide))
+            line += Text(txt(sub, hide))
         }
-        // complications are chips: outlined pills, one per complication
-        extras.forEach { tokens += OutlinePill(txt(it, hide)) }
-        return tokens
+        if (comps.isNotEmpty()) {
+            if (line.isNotEmpty()) line += Space
+            for ((slot, text, ctap) in comps) {
+                if (!hide && SmartspacerIcons.has(tid, slot)) line += IconPill(SsIconKey(tid, slot), ctap)
+                line += OutlinePill(txt(text, hide), ctap)
+            }
+        }
+        if (line.isNotEmpty()) out += line
     }
 
     private fun txt(s: String, hide: Boolean): String =
