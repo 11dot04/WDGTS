@@ -18,8 +18,11 @@ class FlowLayout(
         is GlyphToken -> glyphSize(t.glyph).first
         is Chip -> Hud.CHIP_PAD_L + Hud.CHIP_ICON + Hud.CHIP_GAP + m.pill(t.text) + Hud.CHIP_PAD_R
         is DotRow -> t.total * Hud.DOT + (t.total - 1).coerceAtLeast(0) * Hud.DOT_GAP
+        is IconPill -> Hud.ICONPILL_W
+        is CountRing -> maxOf(Hud.PILL_H, m.pill(t.text) + 4.6f)
+        is Badge -> if (t.text.length <= 2) Hud.BADGE_D else Hud.BADGE_WIDE
         is Icon -> Hud.ICON_W
-        is Timer -> Hud.TIMER_LEAD + m.body(t.text)
+        is Timer -> Hud.TIMER_LEAD + m.body(t.text) * Hud.TIMER_TEXT_SCALE
         is Cursor -> Hud.CURSOR_W
         is Space -> m.bodyAdv
     }
@@ -33,6 +36,8 @@ class FlowLayout(
         a is Text && b is Text -> m.bodyAdv
         a is Icon && b is Text -> 2f
         (a is OutlinePill || a is Chip) && (b is OutlinePill || b is Chip) -> 1.6f
+        a is IconPill && (b is OutlinePill || b is CountRing) -> 0.8f
+        a is GlyphToken && b is GlyphToken && a.glyph.isWeather && b.glyph.isWeather -> 0.8f
         a is DotRow || b is DotRow -> 3f
         a is GlyphToken && b is GlyphToken && a.glyph.isHand && b.glyph.isHand -> 3.5f
         else -> 2.6f
@@ -179,5 +184,39 @@ class LinePacker(private val flow: FlowLayout) {
             }
         }
         return out
+    }
+}
+
+
+/** One horizontal tap span of a line, in pixels from the widget's left edge. */
+class Span(val x0: Float, val x1: Float, val tap: TapRef?)
+
+/** Splits laid-out lines into tap spans, so an arrow pill, a title and a chip can each be their own target. */
+object HudHits {
+    private class Seg(var x0: Float, var x1: Float, val tap: TapRef?)
+
+    /**
+     * Spans cover the whole line width. Each token owns the area up to the middle of the gap to its neighbour;
+     * tokens without a tap take the line's first tap. Neighbours with the same tap are merged, and at most
+     * [maxSpans] are returned (the tail is merged into the last).
+     */
+    fun spans(line: Line, unit: Float, padPx: Float, widthPx: Float, maxSpans: Int = 5): List<Span> {
+        if (line.isEmpty()) return listOf(Span(0f, widthPx, null))
+        val default = line.firstNotNullOfOrNull { it.token.tap }
+        val segs = ArrayList<Seg>()
+        for ((i, p) in line.withIndex()) {
+            val tap = p.token.tap ?: default
+            val left = if (i == 0) 0f else (line[i - 1].x + line[i - 1].w + p.x) / 2f * unit + padPx
+            val right = if (i == line.lastIndex) widthPx else (p.x + p.w + line[i + 1].x) / 2f * unit + padPx
+            val last = segs.lastOrNull()
+            if (last != null && last.tap == tap) last.x1 = right else segs += Seg(left, right, tap)
+        }
+        segs.first().x0 = 0f
+        segs.last().x1 = widthPx
+        while (segs.size > maxSpans) {
+            val tail = segs.removeAt(segs.lastIndex)
+            segs.last().x1 = tail.x1
+        }
+        return segs.map { Span(it.x0, it.x1, it.tap) }
     }
 }

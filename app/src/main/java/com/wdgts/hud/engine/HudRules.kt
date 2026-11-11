@@ -15,11 +15,11 @@ object HudRules {
     fun toFahrenheit(temp: Int, celsius: Boolean): Float = if (celsius) temp * 9f / 5f + 32f else temp.toFloat()
 
     /**
-     * Finger counting for countdowns: remainder first, then fives (7 -> 2,5; 12 -> 2,5,5).
-     * Empty when it would need more than [maxHands] hands, so only the number shows.
+     * Finger counting for countdowns, only up to ten (two hands): remainder first, then fives (7 -> 2,5; 10 -> 5,5).
+     * Above ten nothing is shown and only the number carries the time.
      */
-    fun hands(n: Int, maxHands: Int = 3): List<HudGlyph> {
-        if (n <= 0) return emptyList()
+    fun hands(n: Int, maxHands: Int = 2): List<HudGlyph> {
+        if (n <= 0 || n > 10) return emptyList()
         val parts = ArrayList<Int>()
         if (n % 5 != 0) parts += n % 5
         repeat(n / 5) { parts += 5 }
@@ -27,21 +27,28 @@ object HudRules {
         return parts.map { HudGlyph.valueOf("HAND_$it") }
     }
 
-    class WeatherLook(val glyph: HudGlyph, val word: String)
+    /** One or two glyphs and the word that goes in the bubble. */
+    class WeatherLook(val glyphs: List<HudGlyph>, val word: String) {
+        val glyph get() = glyphs.first()
+    }
+
+    private fun look(word: String, vararg g: HudGlyph) = WeatherLook(g.toList(), word)
 
     /**
-     * The Nothing weather vocabulary: SUNNY, CLOUDY, BREEZY, RAIN, HAIL, THUNDER, TORNADO, SNOW, FLOOD, HAZE,
-     * HURRICANE, STORM, SEVERE, plus CLEAR for a clear night. Weather.kt's words are folded into it.
+     * The Nothing weather vocabulary (SUNNY, PARTLY SUNNY, CLOUDY, CLOUDY NIGHT, CLEAR NIGHT, BREEZY, RAIN, HAIL,
+     * THUNDER, TORNADO, SNOW, FLOOD, HAZE, HURRICANE, STORM, SEVERE). Weather.kt's words are folded into it; some
+     * states carry two glyphs (sun and cloud, moon and cloud).
      */
     fun weatherLook(word: String, night: Boolean): WeatherLook? = when (word.trim().uppercase()) {
-        "CLEAR", "SUNNY" -> if (night) WeatherLook(HudGlyph.MOON, "CLEAR") else WeatherLook(HudGlyph.SUN, "SUNNY")
-        "PARTLY", "CLOUDY", "OVERCAST" -> WeatherLook(HudGlyph.CLOUD, "CLOUDY")
-        "FOG", "HAZE", "MIST" -> WeatherLook(HudGlyph.HAZE, "HAZE")
-        "DRIZZLE", "RAINY", "RAIN", "SHOWERS" -> WeatherLook(HudGlyph.RAIN, "RAIN")
-        "SNOWY", "SNOW" -> WeatherLook(HudGlyph.SNOW, "SNOW")
-        "HAIL", "SLEET" -> WeatherLook(HudGlyph.HAIL, "HAIL")
-        "STORM", "THUNDER" -> WeatherLook(HudGlyph.THUNDER, "THUNDER")
-        "BREEZY", "WINDY" -> WeatherLook(HudGlyph.BREEZY, "BREEZY")
+        "CLEAR", "SUNNY" -> if (night) look("CLEAR NIGHT", HudGlyph.MOON) else look("SUNNY", HudGlyph.SUN)
+        "PARTLY" -> if (night) look("CLOUDY NIGHT", HudGlyph.MOON, HudGlyph.CLOUD) else look("PARTLY SUNNY", HudGlyph.SUN, HudGlyph.CLOUD)
+        "CLOUDY", "OVERCAST" -> if (night) look("CLOUDY NIGHT", HudGlyph.MOON, HudGlyph.CLOUD) else look("CLOUDY", HudGlyph.CLOUD)
+        "FOG", "HAZE", "MIST" -> look("HAZE", HudGlyph.HAZE)
+        "DRIZZLE", "RAINY", "RAIN", "SHOWERS" -> look("RAIN", HudGlyph.RAIN)
+        "SNOWY", "SNOW" -> look("SNOW", HudGlyph.SNOW)
+        "HAIL", "SLEET" -> look("HAIL", HudGlyph.HAIL)
+        "STORM", "THUNDER" -> look("THUNDER", HudGlyph.THUNDER)
+        "BREEZY", "WINDY" -> look("BREEZY", HudGlyph.BREEZY)
         else -> null
     }
 

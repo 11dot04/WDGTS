@@ -1,6 +1,7 @@
 package com.wdgts.hud.engine
 
 import android.graphics.Canvas
+import android.graphics.CornerPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
@@ -8,21 +9,36 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
+import kotlin.math.cos
+import kotlin.math.sin
 
 class HudColors(val ink: Int)
 
-/** Lets the host app draw icons the engine has no SVG for (app icons). Draw inside a [size] square, left edge at [x], centered on [cy]. */
+/**
+ * Lets the host app draw icons the engine has no SVG for (app icons, Smartspacer icons). Draw inside a [size]
+ * square, left edge at [x], centered on [cy]. With [knock] the icon must be cut out of what is already drawn
+ * (use DST_OUT) instead of being painted in [ink].
+ */
 fun interface IconPainter {
-    fun paint(key: Any, c: Canvas, x: Float, cy: Float, size: Float, ink: Int)
+    fun paint(key: Any, c: Canvas, x: Float, cy: Float, size: Float, ink: Int, knock: Boolean)
 }
 
-/**
- * Draws the 4-line Nothing-style HUD onto a Canvas: line 0 is the header, lines 1..3 are packed blocks.
- * [typeface] should be Geist Mono; [weight] sets the 'wght' axis if the font is variable (null = default).
- */
-class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight: Int? = null) {
+/** A finished layout: where every token sits, in design units. Used for drawing and for the tap spans. */
+class Laid(val unit: Float, val size: HudSizing.Size, val lines: List<List<Placed>>)
 
+/**
+ * Draws the Nothing-style HUD onto a Canvas: line 0 is the header, the rest are packed blocks, anchored to the top.
+ * [typeface] should be Geist Mono. [bodyWeight] and [pillWeight] set the 'wght' axis of a variable font
+ * (body text lighter, text inside pills bold, like the reference).
+ */
+class HudRenderer(
+    typeface: Typeface,
+    private val glyphs: GlyphRegistry,
+    bodyWeight: Int? = null,
+    pillWeight: Int? = null,
+) {
     private val text = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val pillText = Paint(Paint.ANTI_ALIAS_FLAG)
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -37,11 +53,11 @@ class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight:
     private val advRatio: Float
 
     init {
-        text.typeface = typeface
-        knock.typeface = typeface
-        if (weight != null) {
-            text.fontVariationSettings = "'wght' $weight"
-            knock.fontVariationSettings = "'wght' $weight"
+        for (p in listOf(text, pillText, knock)) p.typeface = typeface
+        if (bodyWeight != null) text.fontVariationSettings = "'wght' $bodyWeight"
+        if (pillWeight != null) {
+            pillText.fontVariationSettings = "'wght' $pillWeight"
+            knock.fontVariationSettings = "'wght' $pillWeight"
         }
         text.textSize = 100f
         val r = Rect()
@@ -58,20 +74,24 @@ class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight:
     private val flow = FlowLayout(metrics, glyphs::sizeUnits)
     private val packer = LinePacker(flow)
 
-    fun draw(c: Canvas, widthPx: Int, heightPx: Int, content: HudContent, colors: HudColors, icons: IconPainter? = null) {
+    /** Lays the content out for a widget of this pixel size, without drawing. */
+    fun lay(widthPx: Int, heightPx: Int, content: HudContent): Laid {
         val size = HudSizing.of(widthPx, heightPx)
-        val unit = size.unit
-        val maxW = widthPx / unit - 2 * Hud.PAD_H
-
+        val maxW = widthPx / size.unit - 2 * Hud.PAD_H
         val lines = ArrayList<List<Placed>>(size.lines)
         val withExtra = content.header + content.headerExtra
         val headerLine = if (content.headerExtra.isNotEmpty()) flow.layout(withExtra, maxW, 2).takeIf { it.size == 1 } else null
         lines += (headerLine ?: flow.layout(content.header, maxW, 1)).firstOrNull() ?: emptyList()
         lines += packer.pack(content.blocks, size.bodyLines, maxW)
+        return Laid(size.unit, size, lines)
+    }
 
+    fun draw(c: Canvas, widthPx: Int, heightPx: Int, content: HudContent, colors: HudColors, icons: IconPainter? = null) {
+        val laid = lay(widthPx, heightPx, content)
+        val unit = laid.unit
         val pitch = Hud.LINE_PITCH * unit
         val top0 = Hud.PAD_V * unit   // anchored to the top
-        lines.forEachIndexed { i, line ->
+        laid.lines.forEachIndexed { i, line ->
             val cy = top0 + i * pitch + pitch / 2f
             for (p in line) draw(c, p.token, (Hud.PAD_H + p.x) * unit, cy, p.w * unit, unit, colors.ink, icons)
         }
@@ -96,19 +116,32 @@ class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight:
             is Bubble -> knockout(c, bubble(x, cy - ph / 2f, w, u), t.word, x, cy, w, ph, u, ink, centered = false)
             is MonthPill -> outline(c, t.text, x, cy, w, u, ink)
             is OutlinePill -> outline(c, t.text, x, cy, w, u, ink)
+            is CountRing -> outline(c, t.text, x, cy, w, u, ink)
+            is IconPill -> {
+                val shape = Path().apply {
+                    addRoundRect(RectF(x, cy - ph / 2f, x + w, cy + ph / 2f), ph / 2f, ph / 2f, Path.Direction.CW)
+                }
+                val layer = c.saveLayer(x - 2f, cy - ph, x + w + 2f, cy + ph, null)
+                fill.color = ink
+                c.drawPath(shape, fill)
+                val s = Hud.ICONPILL_ICON * u
+                icons?.paint(t.icon, c, x + (w - s) / 2f, cy, s, ink, true)
+                c.restoreToCount(layer)
+            }
+            is Badge -> badge(c, t, x, cy, w, u, ink)
             is GlyphToken -> {
                 val g = glyphs.glyph(t.glyph) ?: return
                 fill.color = ink
                 stroke.color = ink
                 g.draw(c, x, cy - g.height * u / 2f, u, fill, stroke)
             }
-            is Icon -> icons?.paint(t.key, c, x, cy, Hud.ICON_W * u, ink)
+            is Icon -> icons?.paint(t.key, c, x, cy, Hud.ICON_W * u, ink, false)
             is Chip -> {
                 outlineShape(c, x, cy, w, u, ink)
-                icons?.paint(t.icon, c, x + Hud.CHIP_PAD_L * u, cy, Hud.CHIP_ICON * u, ink)
-                text.textSize = size(Hud.PILL_CAP, u)
-                text.color = ink
-                c.drawText(t.text, x + (Hud.CHIP_PAD_L + Hud.CHIP_ICON + Hud.CHIP_GAP) * u, cy + Hud.PILL_CAP * u / 2f, text)
+                icons?.paint(t.icon, c, x + Hud.CHIP_PAD_L * u, cy, Hud.CHIP_ICON * u, ink, false)
+                pillText.textSize = size(Hud.PILL_CAP, u)
+                pillText.color = ink
+                c.drawText(t.text, x + (Hud.CHIP_PAD_L + Hud.CHIP_ICON + Hud.CHIP_GAP) * u, cy + Hud.PILL_CAP * u / 2f, pillText)
             }
             is DotRow -> {
                 val d = Hud.DOT * u
@@ -120,31 +153,82 @@ class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight:
                     if (n < t.done) c.drawCircle(cx, cy, d / 2f, fill) else c.drawCircle(cx, cy, (d - Hud.STROKE * u) / 2f, stroke)
                 }
             }
-            is Timer -> {
-                val s = Hud.STROKE * u
-                stroke.strokeWidth = s
-                stroke.color = ink
-                val left = x + s / 2f
-                val by = cy + ph / 2f - s / 2f
-                val rr = 3.2f * u
-                val path = Path().apply {
-                    moveTo(left, cy - ph / 2f + 0.4f * u)
-                    lineTo(left, by - rr)
-                    cubicTo(left, by - rr * 0.45f, left + rr * 0.45f, by, left + rr, by)
-                    lineTo(x + w, by)
-                }
-                c.drawPath(path, stroke)
-                text.textSize = size(Hud.BODY_CAP, u)
-                text.color = ink
-                c.drawText(t.text, x + Hud.TIMER_LEAD * u, cy + Hud.BODY_CAP * u / 2f - 1.2f * u, text)
-            }
+            is Timer -> timer(c, t, x, cy, w, u, ink)
             is Cursor -> {
                 fill.color = ink
                 val base = cy + Hud.BODY_CAP * u / 2f
-                c.drawRoundRect(RectF(x, base - Hud.CURSOR_H * u, x + w, base), 0.5f * u, 0.5f * u, fill)
+                c.drawRoundRect(RectF(x, base - Hud.CURSOR_H * u, x + w, base), 0.4f * u, 0.4f * u, fill)
             }
             is Space -> Unit
         }
+    }
+
+    /** ⌊ with the number above a long underline: rounded corner, text raised, underline just past the text. */
+    private fun timer(c: Canvas, t: Timer, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
+        val ph = Hud.PILL_H * u
+        val s = Hud.STROKE * u
+        stroke.strokeWidth = s
+        stroke.color = ink
+        val left = x + s / 2f
+        val underline = cy + ph / 2f - s / 2f
+        val baseline = underline - Hud.TIMER_GAP * u
+        val cap = Hud.BODY_CAP * Hud.TIMER_TEXT_SCALE * u
+        val rr = 4f * u
+        val path = Path().apply {
+            moveTo(left, baseline - cap)
+            lineTo(left, underline - rr)
+            cubicTo(left, underline - rr * 0.45f, left + rr * 0.45f, underline, left + rr, underline)
+            lineTo(x + w, underline)
+        }
+        c.drawPath(path, stroke)
+        text.textSize = size(Hud.BODY_CAP * Hud.TIMER_TEXT_SCALE, u)
+        text.color = ink
+        c.drawText(t.text, x + Hud.TIMER_LEAD * u, baseline, text)
+    }
+
+    private fun burst(cx: Float, cy: Float, r: Float, spikes: Int = 12, inner: Float = 0.8f): Path {
+        val p = Path()
+        for (i in 0 until spikes * 2) {
+            val a = Math.PI * i / spikes - Math.PI / 2
+            val rr = if (i % 2 == 0) r else r * inner
+            val px = cx + (rr * cos(a)).toFloat()
+            val py = cy + (rr * sin(a)).toFloat()
+            if (i == 0) p.moveTo(px, py) else p.lineTo(px, py)
+        }
+        p.close()
+        return p
+    }
+
+    private fun clover(cx: Float, cy: Float, r: Float): Path = Path().apply {
+        val lobe = r * 0.56f
+        val off = r * 0.44f
+        addCircle(cx - off, cy, lobe, Path.Direction.CW)
+        addCircle(cx + off, cy, lobe, Path.Direction.CW)
+        addCircle(cx, cy - off, lobe, Path.Direction.CW)
+        addCircle(cx, cy + off, lobe, Path.Direction.CW)
+    }
+
+    /** Burst or clover with a short text knocked out; the text shrinks as it gets longer. */
+    private fun badge(c: Canvas, t: Badge, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
+        val cx = x + w / 2f
+        val r = Hud.BADGE_D * u / 2f
+        val layer = c.saveLayer(x - 4f, cy - r - 4f, x + w + 4f, cy + r + 4f, null)
+        fill.color = ink
+        when (t.shape) {
+            BadgeShape.BURST -> {
+                fill.pathEffect = CornerPathEffect(r * 0.14f)
+                val path = burst(cx, cy, r * 1.07f, if (w > Hud.BADGE_D * u + 1f) 14 else 12, 0.82f)
+                if (w > Hud.BADGE_D * u + 1f) path.transform(android.graphics.Matrix().apply { setScale(w / (2f * r * 1.07f), 1f, cx, cy) })
+                c.drawPath(path, fill)
+                fill.pathEffect = null
+            }
+            BadgeShape.CLOVER -> c.drawPath(clover(cx, cy, r), fill)
+        }
+        val k = when (t.text.length) { 0, 1 -> 1f; 2 -> 0.82f; 3 -> 0.62f; else -> 0.5f }
+        knock.textSize = size(Hud.PILL_CAP, u) * k
+        val capPx = Hud.PILL_CAP * u * k
+        c.drawText(t.text, cx - knock.measureText(t.text) / 2f, cy + capPx / 2f, knock)
+        c.restoreToCount(layer)
     }
 
     private fun outlineShape(c: Canvas, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
@@ -158,9 +242,9 @@ class HudRenderer(typeface: Typeface, private val glyphs: GlyphRegistry, weight:
 
     private fun outline(c: Canvas, label: String, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
         outlineShape(c, x, cy, w, u, ink)
-        text.textSize = size(Hud.PILL_CAP, u)
-        text.color = ink
-        c.drawText(label, x + (w - text.measureText(label)) / 2f, cy + Hud.PILL_CAP * u / 2f, text)
+        pillText.textSize = size(Hud.PILL_CAP, u)
+        pillText.color = ink
+        c.drawText(label, x + (w - pillText.measureText(label)) / 2f, cy + Hud.PILL_CAP * u / 2f, pillText)
     }
 
     /** Fills [shape] with ink and punches [label] out of it so whatever is behind shows through. */

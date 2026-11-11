@@ -18,10 +18,18 @@ object Hud {
     const val MONTH_W = 22.291f
     const val BUBBLE_PAD_L = 5.6f
     const val BUBBLE_PAD_R = 6.0f
-    const val CURSOR_W = 2.4f
-    const val CURSOR_H = 7.5f
+    const val CURSOR_W = 3.0f
+    /** As tall as the digits next to it. */
+    const val CURSOR_H = 6.4f
     const val TIMER_LEAD = 6.2f
     const val ICON_W = 10.4f
+    const val ICONPILL_W = 13.2f
+    const val ICONPILL_ICON = 6.6f
+    const val BADGE_D = 12.6f
+    const val BADGE_WIDE = 15.2f
+    const val TIMER_TEXT_SCALE = 0.92f
+    /** Distance from the timer text's baseline up from its underline. */
+    const val TIMER_GAP = 4.1f
     const val CHIP_ICON = 6.2f
     const val CHIP_PAD_L = 2.4f
     const val CHIP_PAD_R = 3.2f
