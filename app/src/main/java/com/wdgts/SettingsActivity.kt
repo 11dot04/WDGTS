@@ -19,6 +19,7 @@ import android.widget.Toast
 import com.wdgts.core.Fonts
 import com.wdgts.core.Prefs
 import com.wdgts.hud.HudPrefs
+import com.wdgts.hud.HudSources
 import com.wdgts.hud.HudWidget
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource.Access
@@ -158,21 +159,53 @@ class SettingsActivity : Activity() {
         })
 
         header("HUD")
-        note("A sun or moon between the month and the time, like the AM/PM marker on the Nothing clock. Off by default, also on 24-hour clocks.")
-        col.addView(android.widget.CheckBox(this).apply {
-            text = "Day/night glyph"
-            isChecked = HudPrefs.dayNightGlyph(this@SettingsActivity)
-            setOnCheckedChangeListener { _, on ->
-                HudPrefs.setDayNightGlyph(this@SettingsActivity, on)
+        fun radios(title: String, labels: List<String>, current: Int, onPick: (Int) -> Unit) {
+            note(title)
+            val group = android.widget.RadioGroup(this)
+            labels.forEachIndexed { i, l ->
+                group.addView(android.widget.RadioButton(this).apply { text = l; id = 7000 + i })
+            }
+            group.check(7000 + current)
+            group.setOnCheckedChangeListener { _, id ->
+                onPick(id - 7000)
                 HudWidget().refreshAll(applicationContext)
             }
-        })
+            col.addView(group)
+        }
+        radios(
+            "Between the month and the time (the Nothing clock puts a time-zone burst there).",
+            listOf("Nothing", "Sun or moon (day / night)", "Time zone, always", "Time zone, only away from home"),
+            HudPrefs.badgeMode(this),
+        ) { HudPrefs.setBadgeMode(this, it) }
         col.addView(android.widget.CheckBox(this).apply {
-            text = "Switch at sunrise and sunset (instead of 06:00 and 18:00)"
+            text = "Sun/moon switches at sunrise and sunset (instead of 06:00 and 18:00)"
             isChecked = HudPrefs.dayNightBySun(this@SettingsActivity)
             setOnCheckedChangeListener { _, on ->
                 HudPrefs.setDayNightBySun(this@SettingsActivity, on)
                 HudWidget().refreshAll(applicationContext)
+            }
+        })
+        radios(
+            "Now playing layout.",
+            listOf("Vary by track", "Title, then artist", "Title (BY) artist, when short", "Title, then [artist]"),
+            HudPrefs.musicLayout(this),
+        ) { HudPrefs.setMusicLayout(this, it) }
+        col.addView(Button(this).apply {
+            text = "Apps that get a notification chip"
+            setOnClickListener {
+                val apps = HudSources.candidateApps(this@SettingsActivity)
+                val chosen = (HudPrefs.chipApps(this@SettingsActivity) ?: HudSources.defaultChipApps()).toMutableSet()
+                android.app.AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("Notification chips")
+                    .setMultiChoiceItems(apps.map { it.second }.toTypedArray(), BooleanArray(apps.size) { apps[it].first in chosen }) { _, i, on ->
+                        if (on) chosen += apps[i].first else chosen -= apps[i].first
+                    }
+                    .setPositiveButton("Save") { _, _ ->
+                        HudPrefs.setChipApps(this@SettingsActivity, chosen)
+                        HudWidget().refreshAll(applicationContext)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
             }
         })
 
