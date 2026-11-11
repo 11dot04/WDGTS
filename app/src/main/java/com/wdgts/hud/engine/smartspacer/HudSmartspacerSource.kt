@@ -152,6 +152,11 @@ object HudSmartspacerSource {
         return mapper.top(ts, redactSensitive = locked, skip = skip)
     }
 
+    private fun slotOf(name: String) = when (name) {
+        "primary" -> "primary"; "subtitle" -> "sub"; "subtitleSupplemental" -> "c1"
+        "supplementalLine" -> "c2"; else -> "c3"
+    }
+
     /** A readable dump of every live target (copy it from Settings) so the mapping can be checked against real data. */
     fun dump(): String = buildString {
         val ts = targets
@@ -179,7 +184,7 @@ object HudSmartspacerSource {
                 ).forEach { (name, item) ->
                     if (item != null) {
                         val ic = item.icon
-                        appendLine("  $name text='${item.text?.text}' icon=${ic != null} tint=${ic?.shouldTint} desc='${ic?.contentDescription}' tap=${item.tapAction?.id} source=${item.loggingInfo?.let { "${it.packageName}/${it.featureType}" }}")
+                        appendLine("  $name text='${item.text?.text}' icon=${ic != null} cached=${SmartspacerIcons.has(t.smartspaceTargetId, slotOf(name))} tint=${ic?.shouldTint} desc='${ic?.contentDescription}' tap=${item.tapAction?.id} source=${item.loggingInfo?.let { "${it.packageName}/${it.featureType}" }}")
                     }
                 }
             }

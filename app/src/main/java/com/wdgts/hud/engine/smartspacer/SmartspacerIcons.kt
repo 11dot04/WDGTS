@@ -62,7 +62,9 @@ object SmartspacerIcons {
 
     private fun load(ctx: Context, icon: Icon): Bitmap? {
         if (!icon.isLoadable()) return null
-        val d = runCatching { icon.icon.getEnabledDrawableOrNull(ctx) }.getOrNull() ?: return null
+        // getEnabledDrawableOrNull only returns the "disabled state" drawable of a state list (resource icons) and
+        // is null for everything else; the SDK's own views fall back to the plain icon, and so must we.
+        val d = runCatching { icon.icon.getEnabledDrawableOrNull(ctx) ?: icon.icon.loadDrawable(ctx) }.getOrNull() ?: return null
         val size = 128
         val raw = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val iw = d.intrinsicWidth.takeIf { it > 0 } ?: size
