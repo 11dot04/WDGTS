@@ -7,15 +7,46 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="fitXY" />
-    <!-- tap zones: heights and the top margin are set in px by HudWidget.bind, one per line, anchored to the top -->
+    <!-- tap zones: each line is a row of five spans; HudWidget.bind sets their pixel sizes and intents,
+         anchored to the top, so every pill, title and chip can be its own target -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
-        <FrameLayout android:id="@+id/zone_l1" android:layout_width="match_parent" android:layout_height="0dp" />
-        <FrameLayout android:id="@+id/zone_l2" android:layout_width="match_parent" android:layout_height="0dp" />
-        <FrameLayout android:id="@+id/zone_l3" android:layout_width="match_parent" android:layout_height="0dp" />
-        <FrameLayout android:id="@+id/zone_l4" android:layout_width="match_parent" android:layout_height="0dp" />
-        <FrameLayout android:id="@+id/zone_l5" android:layout_width="match_parent" android:layout_height="0dp" />
+        <LinearLayout android:id="@+id/zone_l1" android:layout_width="match_parent" android:layout_height="0dp" android:orientation="horizontal">
+            <FrameLayout android:id="@+id/zone_l1_s1" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l1_s2" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l1_s3" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l1_s4" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l1_s5" android:layout_width="0dp" android:layout_height="match_parent" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/zone_l2" android:layout_width="match_parent" android:layout_height="0dp" android:orientation="horizontal">
+            <FrameLayout android:id="@+id/zone_l2_s1" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l2_s2" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l2_s3" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l2_s4" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l2_s5" android:layout_width="0dp" android:layout_height="match_parent" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/zone_l3" android:layout_width="match_parent" android:layout_height="0dp" android:orientation="horizontal">
+            <FrameLayout android:id="@+id/zone_l3_s1" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l3_s2" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l3_s3" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l3_s4" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l3_s5" android:layout_width="0dp" android:layout_height="match_parent" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/zone_l4" android:layout_width="match_parent" android:layout_height="0dp" android:orientation="horizontal">
+            <FrameLayout android:id="@+id/zone_l4_s1" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l4_s2" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l4_s3" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l4_s4" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l4_s5" android:layout_width="0dp" android:layout_height="match_parent" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/zone_l5" android:layout_width="match_parent" android:layout_height="0dp" android:orientation="horizontal">
+            <FrameLayout android:id="@+id/zone_l5_s1" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l5_s2" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l5_s3" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l5_s4" android:layout_width="0dp" android:layout_height="match_parent" />
+            <FrameLayout android:id="@+id/zone_l5_s5" android:layout_width="0dp" android:layout_height="match_parent" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>
