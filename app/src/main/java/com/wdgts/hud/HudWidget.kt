@@ -1,43 +1,42 @@
 package com.wdgts.hud
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import android.graphics.Typeface
-import android.net.Uri
 import android.util.TypedValue
-import android.provider.CallLog
+import android.view.View
 import android.widget.RemoteViews
 import com.wdgts.R
-import com.wdgts.SettingsActivity
 import com.wdgts.core.*
 import com.wdgts.hud.engine.GlyphRegistry
+import com.wdgts.hud.engine.Hud
 import com.wdgts.hud.engine.HudColors
+import com.wdgts.hud.engine.HudHits
 import com.wdgts.hud.engine.HudRenderer
 import com.wdgts.hud.engine.HudSizing
 import com.wdgts.hud.engine.IconPainter
-import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
+import com.wdgts.hud.engine.smartspacer.SmartspacerIcons
+import com.wdgts.hud.engine.smartspacer.SsIconKey
 import com.wdgts.widgets.GlyphMask
 import com.wdgts.widgets.ImageWidget
 import com.wdgts.widgets.Sched
 import com.wdgts.widgets.async
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import java.util.WeakHashMap
 import kotlin.math.max
 
 /**
- * The Nothing-clockface HUD: four lines, the first is the date, the other three go to whatever is most relevant
- * (see [HudComposer]). Layout, pills, bubbles and glyphs live in com.wdgts.hud.engine; this class supplies the
- * schedule, colours, tap intents and the app-icon painter.
+ * The Nothing-clockface HUD. What it says is decided by [HudComposer]; layout, pills and glyphs live in
+ * com.wdgts.hud.engine; this class supplies the schedule, colours, tap zones and the icon painter.
  */
 class HudWidget : ImageWidget() {
     override val layoutRes: Int = R.layout.widget_hud
@@ -52,57 +51,50 @@ class HudWidget : ImageWidget() {
 
     override fun onReceive(c: Context, i: Intent) {
         when (i.action) {
-            ACTION_DISMISS -> { Haptics.tick(c); HudSignals.lookDismissedAt = System.currentTimeMillis(); refreshAll(c) }
             ACTION_TICK -> { refreshAll(c); Sched.arm(c, HudWidget::class.java, ACTION_TICK, System.currentTimeMillis() + 5 * 60_000L, 70) }
             else -> super.onReceive(c, i)
         }
     }
 
-    private val FLAGS = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-
-    private fun launch(c: Context, pkg: String, code: Int): PendingIntent? =
-        c.packageManager.getLaunchIntentForPackage(pkg)?.let { PendingIntent.getActivity(c, code, it, FLAGS) }
-
-    private fun local(c: Context, action: String, code: Int): PendingIntent {
-        val settings = PendingIntent.getActivity(c, code, Intent(c, SettingsActivity::class.java), FLAGS)
-        return when {
-            action == HudSources.CALLS ->
-                PendingIntent.getActivity(c, code, Intent(Intent.ACTION_VIEW).setType(CallLog.Calls.CONTENT_TYPE), FLAGS)
-            action == HudSources.DISMISS_LOOK -> broadcast(c, ACTION_DISMISS, code)
-            action == HudSources.DRIK -> PendingIntent.getActivity(c, code, Intent(Intent.ACTION_VIEW, Uri.parse(
-                "https://www.drikpanchang.com/panchang/day-panchang.html?date=" +
-                    LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.US)))), FLAGS)
-            action.startsWith(HudSources.APP_PREFIX) -> launch(c, action.removePrefix(HudSources.APP_PREFIX), code) ?: settings
-            else -> settings
-        }
-    }
-
-    /** Local taps are handled here; anything else is a Smartspacer target and goes through [HudTapActivity]. */
-    private fun tapIntent(c: Context, tap: TapRef?, code: Int): PendingIntent = when {
-        tap == null -> local(c, HudSources.SETTINGS, code)
-        tap.targetId == HudSources.LOCAL -> local(c, tap.actionId ?: HudSources.SETTINGS, code)
-        else -> HudTapActivity.pending(c, tap, code)
-    }
-
     /**
-     * One tap zone per line: a widget cannot report where you touched. Zones are sized in pixels to match the
-     * bitmap's lines, anchored to the top; lines the widget is too short for get no zone.
+     * Tap zones: every line is a row of up to five spans (see [HudHits]) laid over the bitmap, so an arrow pill,
+     * a title, a chip and a countdown can each be their own target. A widget cannot report where you touched,
+     * so spans are sized in pixels to match the layout; everything is anchored to the top.
      */
     override fun bind(ctx: Context, rv: RemoteViews) {
         val g = HudGeometry.of(ctx)
         val slots = g.size.bodyLines
-        val taps = HudComposer.lineTaps(HudComposer.compose(ctx, slots), slots)
-        val zones = listOf(R.id.zone_l1, R.id.zone_l2, R.id.zone_l3, R.id.zone_l4, R.id.zone_l5)
+        val content = HudComposer.compose(ctx, slots)
+        val laid = renderer(ctx).lay(g.widthPx, g.heightPx, content)
+        val pad = Hud.PAD_H * laid.unit
         rv.setViewLayoutMargin(R.id.zone_l1, RemoteViews.MARGIN_TOP, g.topPx, TypedValue.COMPLEX_UNIT_PX)
-        zones.forEachIndexed { i, id ->
-            val on = i < g.size.lines
-            rv.setViewVisibility(id, if (on) android.view.View.VISIBLE else android.view.View.GONE)
-            if (on) {
-                rv.setViewLayoutHeight(id, g.pitchPx, TypedValue.COMPLEX_UNIT_PX)
-                rv.setOnClickPendingIntent(id, tapIntent(ctx, taps.getOrNull(i), 71 + i))
+        for (i in 0 until Hud.MAX_LINES) {
+            val lineId = id(ctx, "zone_l${i + 1}")
+            if (i >= g.size.lines) {
+                rv.setViewVisibility(lineId, View.GONE)
+                continue
+            }
+            rv.setViewVisibility(lineId, View.VISIBLE)
+            rv.setViewLayoutHeight(lineId, g.pitchPx, TypedValue.COMPLEX_UNIT_PX)
+            val line = laid.lines.getOrNull(i) ?: emptyList()
+            val spans = HudHits.spans(line, laid.unit, pad, g.widthPx.toFloat())
+            for (j in 0 until SPANS) {
+                val spanId = id(ctx, "zone_l${i + 1}_s${j + 1}")
+                if (j >= spans.size) {
+                    rv.setViewVisibility(spanId, View.GONE)
+                    continue
+                }
+                val s = spans[j]
+                var tap = s.tap
+                if (i == 0 && tap == null) tap = content.headerTap
+                rv.setViewVisibility(spanId, View.VISIBLE)
+                rv.setViewLayoutWidth(spanId, max(1f, s.x1 - s.x0), TypedValue.COMPLEX_UNIT_PX)
+                rv.setOnClickPendingIntent(spanId, HudTapActivity.pending(ctx, tap, 100 + i * 10 + j))
             }
         }
     }
+
+    private fun id(ctx: Context, name: String) = ctx.resources.getIdentifier(name, "id", ctx.packageName)
 
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         val p = Palette.of(ctx)
@@ -113,35 +105,48 @@ class HudWidget : ImageWidget() {
     }
 
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val coverage = WeakHashMap<Bitmap, Float>()
 
-    /** Messaging apps' own monochrome icons, tinted to the HUD ink and optically sized. */
-    private fun iconPainter(ctx: Context) = IconPainter { key, c, x, cy, size, ink ->
-        val pkg = (key as? AppIconKey)?.pkg ?: return@IconPainter
-        val mask = GlyphMask.forPackage(ctx, pkg) ?: return@IconPainter
-        val target = size * GlyphMask.optical(GlyphMask.coverage(mask))
+    /** App icons (monochrome layer) and Smartspacer icons, optically sized; tinted, or cut out of a filled pill. */
+    private fun iconPainter(ctx: Context) = IconPainter { key, c, x, cy, size, ink, knock ->
+        val mask: Bitmap = when (key) {
+            is AppIconKey -> GlyphMask.forPackage(ctx, key.pkg)
+            is SsIconKey -> SmartspacerIcons.get(key)
+            else -> null
+        } ?: return@IconPainter
+        val cov = coverage.getOrPut(mask) { GlyphMask.coverage(mask) }
+        val target = size * GlyphMask.optical(cov)
         val k = target / max(mask.width, mask.height)
         val bw = mask.width * k
         val bh = mask.height * k
         val left = x + (size - bw) / 2f
         val top = cy - bh / 2f
-        iconPaint.colorFilter = PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN)
+        if (knock) {
+            iconPaint.colorFilter = null
+            iconPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
+        } else {
+            iconPaint.xfermode = null
+            iconPaint.colorFilter = PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN)
+        }
         c.drawBitmap(mask, null, RectF(left, top, left + bw, top + bh), iconPaint)
+        iconPaint.xfermode = null
     }
 
     companion object {
-        private const val ACTION_TICK = "com.wdgts.HUD_TICK"
-        private const val ACTION_DISMISS = "com.wdgts.HUD_DISMISS"
+        const val ACTION_TICK = "com.wdgts.HUD_TICK"
+        private const val SPANS = 5
 
         /** true = draw the palette surface behind the text; false = transparent, white ink (the Nothing look). */
         private const val CARD = false
 
-        /** 'wght' axis for a variable Geist Mono; lower = thinner. Tune against the reference. */
-        private const val WEIGHT = 330
+        /** 'wght' axis for a variable Geist Mono: regular body text, bold text inside pills, like the reference. */
+        private const val WEIGHT_BODY = 400
+        private const val WEIGHT_PILL = 650
 
         @Volatile private var cached: HudRenderer? = null
 
         private fun renderer(ctx: Context): HudRenderer = cached ?: synchronized(this) {
-            cached ?: HudRenderer(typeface(ctx), GlyphRegistry(ctx), WEIGHT).also { cached = it }
+            cached ?: HudRenderer(typeface(ctx), GlyphRegistry(ctx), WEIGHT_BODY, WEIGHT_PILL).also { cached = it }
         }
 
         /** A Geist Mono file in assets/fonts (any file name containing "geist" and "mono"), else the app's mono font. */

@@ -2,6 +2,8 @@ package com.wdgts.hud
 
 import android.content.Context
 import android.text.format.DateFormat
+import com.wdgts.hud.engine.Badge
+import com.wdgts.hud.engine.BadgeShape
 import com.wdgts.hud.engine.Block
 import com.wdgts.hud.engine.GlyphToken
 import com.wdgts.hud.engine.HudBlocks
@@ -9,28 +11,29 @@ import com.wdgts.hud.engine.HudContent
 import com.wdgts.hud.engine.HudGlyph
 import com.wdgts.hud.engine.HudHeader
 import com.wdgts.hud.engine.HudPlan
-import com.wdgts.hud.engine.HudRules
-import com.wdgts.hud.engine.Icon
 import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.Text
 import com.wdgts.hud.engine.Token
 import com.wdgts.hud.engine.WeatherInfo
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
-import com.wdgts.music.MusicState
-import com.wdgts.widgets.GlyphMask
+import com.wdgts.widgets.Sched
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
- * Decides what the HUD says right now. Nothing is pinned: every block has a relevance class
- *   0 urgent      missed calls
- *   1 contextual  Smartspacer's top target, look-away nudge, streaks, notable weather
- *   2 ambient     tithi, charging, notification chips, ordinary weather (never on the fifth line)
- * and the free lines go to the most relevant ones. A greeting may take over the date line. When the lines
- * are all wanted by other blocks, the temperature moves up into the date line as a chip.
+ * Decides what the HUD says right now.
+ *   line 1      the date. A greeting may take it over for a minute, a few times a day.
+ *   line 2      the weather, right under the date, as in the reference, unless the lines are needed
+ *               (then the temperature moves up into line 1 as a chip)
+ *   the rest    blocks by relevance: 0 urgent (missed calls) > 1 contextual (Smartspacer's top target, music,
+ *               look-away, streaks) > 2 ambient (tithi, charging, notification chips; never on the fifth line)
  */
 object HudComposer {
+    private const val GREETING_MS = 60_000L
+
     private class Ranked(val cls: Int, val block: Block)
 
     /** [slots] = body lines available (3 on a 4-line widget, 4 when the widget is tall enough for five). */
@@ -42,17 +45,22 @@ object HudComposer {
         val zone = ZoneId.systemDefault()
         val zdt = ZonedDateTime.now(zone)
         val today = zdt.toLocalDate()
+        val greetingOk = greetingAllowed(c, now, zdt.hour, today)
 
         val ranked = ArrayList<Ranked>()
         HudSources.missedCalls()?.let { ranked += Ranked(0, it) }
-        HudSmartspacerSource.top(c)?.let { ranked += Ranked(1, withMusicIcon(c, it)) }
+        val target = HudSmartspacerSource.top(c) { b ->
+            (b.headline && !greetingOk) || (b.segments.firstOrNull()?.firstOrNull { it is Text } as? Text)?.text?.let { HudSources.isPlayingTitle(it) } == true
+        }
+        target?.let { ranked += Ranked(1, it) }
+        HudSources.music(c)?.let { ranked += Ranked(1, it) }
         HudSources.lookAway(now)?.let { ranked += Ranked(1, it) }
         HudSources.streaks(c, now, zone, today, zdt.hour)?.let { ranked += Ranked(1, it) }
         HudSources.tithi(c, now, zone, today)?.let { ranked += Ranked(2, it.copy(optional = true)) }
         HudSources.charging(c)?.let { ranked += Ranked(2, it.copy(optional = true)) }
         HudSources.chips(c)?.let { ranked += Ranked(2, it.copy(optional = true)) }
 
-        // a greeting takes over line 1 while it is the top target
+        // a greeting takes over line 1 while it is allowed
         var takeover: List<Token>? = null
         var headerTap: TapRef? = null
         val head = ranked.firstOrNull { it.block.headline }
@@ -67,46 +75,59 @@ object HudComposer {
             }
         }
 
-        // weather: its own line when there is room, otherwise a temperature chip in the date line
+        // weather: its own line directly under the date when there is room, otherwise a temperature chip
         val weather: WeatherInfo? = HudSmartspacerSource.weather() ?: HudSources.weather(c, now, zone, today)
+        var weatherBlock: Block? = null
         var extra: List<Token> = emptyList()
         if (weather != null) {
             val others = ranked.sumOf { r -> r.block.segments.count { it.isNotEmpty() } }
             if (others + 1 <= minOf(slots, 3)) {
-                val cls = if (weather.word?.uppercase() in HudRules.NOTABLE_WORDS) 1 else 2
-                ranked += Ranked(cls, HudBlocks.weather(weather).copy(optional = cls == 2))
+                weatherBlock = HudBlocks.weather(weather).copy(optional = true)
             } else if (takeover == null) {
                 extra = HudBlocks.temperatureChip(weather.temp, weather.celsius)
             }
         }
 
-        val blocks = ranked.sortedBy { it.cls }.map { it.block }
-        val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), dayNightGlyph(c, now, zone, today, zdt.hour))
+        val blocks = listOfNotNull(weatherBlock) + ranked.sortedBy { it.cls }.map { it.block }
+        val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), headerBadge(c, now, zone, today, zdt.hour))
         return HudContent(header, blocks, headerExtra = if (takeover == null) extra else emptyList(), headerTap = headerTap)
     }
 
-    /** The now-playing target gets the player's own monochrome icon, or a note glyph when the app has none. */
-    private fun withMusicIcon(c: Context, b: Block): Block {
-        if (!MusicState.hasSession) return b
-        val title = MusicState.title
-        val first = b.segments.firstOrNull { it.isNotEmpty() } ?: return b
-        val text = first.firstOrNull { it is Text } as? Text ?: return b
-        if (title.isBlank() || !text.text.equals(title, ignoreCase = true)) return b
-        val lead: Token = if (GlyphMask.forPackage(c, MusicState.pkg) != null) {
-            Icon(AppIconKey(MusicState.pkg), text.tap)
-        } else {
-            GlyphToken(HudGlyph.MUSIC_NOTE, text.tap)
+    /** One minute per part of the day (05-12, 12-17, 17-22), starting with the first time you look at the phone. */
+    private fun greetingAllowed(c: Context, now: Long, hour: Int, today: LocalDate): Boolean {
+        val part = when (hour) { in 5..11 -> 1; in 12..16 -> 2; in 17..21 -> 3; else -> 0 }
+        if (part == 0) return false
+        val key = today.toEpochDay() * 10 + part
+        if (HudPrefs.greetingKey(c) != key) {
+            if (HudSignals.screenOnSince <= 0L) return false   // nobody is looking yet
+            HudPrefs.startGreeting(c, key, now)
+            Sched.arm(c.applicationContext, HudWidget::class.java, HudWidget.ACTION_TICK, now + GREETING_MS + 1500L, 70)
         }
-        val segs = b.segments.map { if (it === first) listOf(lead) + it else it }
-        val compact = b.compact?.let { listOf(lead) + it }
-        return b.copy(segments = segs, compact = compact)
+        return key == HudPrefs.greetingKey(c) && now - HudPrefs.greetingStart(c) < GREETING_MS
     }
 
-    /** Sun or moon for the date line, only when the setting is on. */
-    private fun dayNightGlyph(c: Context, now: Long, zone: ZoneId, today: LocalDate, hour: Int): HudGlyph? {
-        if (!HudPrefs.dayNightGlyph(c)) return null
-        val night = if (HudPrefs.dayNightBySun(c)) HudSources.isNight(c, now, zone, today) else hour !in 6..17
-        return if (night) HudGlyph.MOON else HudGlyph.SUN
+    /** What sits between the month and the time, per the setting: sun/moon, or the time-zone burst. */
+    private fun headerBadge(c: Context, now: Long, zone: ZoneId, today: LocalDate, hour: Int): Token? = when (HudPrefs.badgeMode(c)) {
+        HudPrefs.BADGE_DAY_NIGHT -> {
+            val night = if (HudPrefs.dayNightBySun(c)) HudSources.isNight(c, now, zone, today) else hour !in 6..17
+            GlyphToken(if (night) HudGlyph.MOON else HudGlyph.SUN)
+        }
+        HudPrefs.BADGE_ZONE -> Badge(BadgeShape.BURST, zoneAbbreviation(zone))
+        HudPrefs.BADGE_ZONE_AWAY -> {
+            val home = HudPrefs.homeZone(c) ?: zone.id.also { HudPrefs.setHomeZone(c, it) }
+            if (home != zone.id) Badge(BadgeShape.BURST, zoneAbbreviation(zone)) else null
+        }
+        else -> null
+    }
+
+    /** IST, EST, ... or the offset (+5:30) when the zone has no short name. */
+    private fun zoneAbbreviation(zone: ZoneId): String {
+        val s = zone.getDisplayName(TextStyle.SHORT, Locale.ENGLISH).uppercase()
+        if (!s.startsWith("GMT") && !s.startsWith("UTC") && s.length <= 4) return s
+        val secs = java.time.ZonedDateTime.now(zone).offset.totalSeconds
+        val h = secs / 3600
+        val m = Math.abs(secs % 3600) / 60
+        return (if (secs >= 0) "+" else "-") + Math.abs(h) + (if (m > 0) ":" + "%02d".format(m) else "")
     }
 
     /** What each tap zone fires: the date line first, then one per free line. */
