@@ -186,10 +186,18 @@ class SettingsActivity : Activity() {
             }
         })
         radios(
-            "Now playing layout.",
-            listOf("Vary by track", "Title, then artist", "Title (BY) artist, when short", "Title, then [artist]"),
+            "Now playing style (one line when it fits, otherwise the artist goes under the title).",
+            listOf(
+                "Vary by track", "Title, then artist", "TITLE (BY) ARTIST + rings", "TITLE © [ARTIST]",
+                "TITLE + progress rings + ARTIST", "TITLE + album-art strip + ARTIST",
+            ),
             HudPrefs.musicLayout(this),
         ) { HudPrefs.setMusicLayout(this, it) }
+        radios(
+            "Now playing button.",
+            listOf("Arrow (opens the player)", "Pause pill", "Cassette pill (pause)"),
+            HudPrefs.musicControl(this),
+        ) { HudPrefs.setMusicControl(this, it) }
         col.addView(Button(this).apply {
             text = "Apps that get a notification chip"
             setOnClickListener {
