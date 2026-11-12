@@ -10,6 +10,7 @@ import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.wdgts.hud.HudHooks
+import com.wdgts.hud.HudPrefs
 import com.wdgts.hud.HudSignals
 import com.wdgts.hud.HudWidget
 import kotlin.concurrent.thread
@@ -24,6 +25,7 @@ class MediaListener : NotificationListenerService() {
     private var controllers: List<MediaController> = emptyList()
     private var msm: MediaSessionManager? = null
     private val hud = HudHooks(this)
+    private var beat = 0
 
     private val callback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) = sync()
@@ -35,7 +37,11 @@ class MediaListener : NotificationListenerService() {
 
     private val tick = object : Runnable {
         override fun run() {
-            if (MusicState.playing) MusicWidgets.refreshAll(this@MediaListener)
+            if (MusicState.playing) {
+                MusicWidgets.refreshAll(this@MediaListener)
+                // the HUD's progress rings only need a redraw now and then
+                if (++beat % 6 == 0 && HudPrefs.musicLayout(this@MediaListener).let { it == 0 || it == 4 }) HudWidget().refreshAll(this@MediaListener)
+            }
             handler.postDelayed(this, 5_000L)
         }
     }
@@ -83,9 +89,11 @@ class MediaListener : NotificationListenerService() {
         if (c == null) {
             MusicState.hasSession = false
             MusicState.playing = false
+            MusicState.controller = null
             MusicWidgets.refreshAll(this)
             return
         }
+        MusicState.controller = c
         val md = c.metadata
         val pb = c.playbackState
         val oldKey = MusicState.key

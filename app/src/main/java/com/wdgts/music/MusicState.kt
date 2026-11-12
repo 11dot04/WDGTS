@@ -1,6 +1,7 @@
 package com.wdgts.music
 
 import android.graphics.Bitmap
+import android.media.session.MediaController
 import android.os.SystemClock
 
 /** In-memory now-playing snapshot, written by MediaListener, read by the three music widgets. */
@@ -17,6 +18,8 @@ object MusicState {
     @Volatile var speed = 1f
     @Volatile var cutout: Bitmap? = null
     @Volatile var cutoutKey = 0L
+    /** The session being mirrored; the HUD's pause button drives it. */
+    @Volatile var controller: MediaController? = null
 
     /** Stable per-track number: drives the random shape and the random font + axes. */
     val key: Long get() = (title.hashCode().toLong() shl 32) xor (artist.hashCode().toLong() and 0xffffffffL)
