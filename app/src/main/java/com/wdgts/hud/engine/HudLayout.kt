@@ -25,6 +25,8 @@ class FlowLayout(
         is Timer -> Hud.TIMER_LEAD + m.body(t.text) * Hud.TIMER_TEXT_SCALE
         is Cursor -> Hud.CURSOR_W
         is Space -> m.bodyAdv
+        is ArtStrip -> Hud.ART_W
+        is ProgressMark -> Hud.PROGRESS_W
     }
 
     private fun gap(a: Token, b: Token): Float = when {
@@ -43,10 +45,37 @@ class FlowLayout(
         else -> 2.6f
     }
 
+    /** Cuts [word] to the longest prefix that leaves room for "…"; counts double-width characters as what they are. */
     private fun fit(word: String, maxW: Float): String {
         if (m.body(word) <= maxW) return word
-        val n = ((maxW - m.body("…")) / m.bodyAdv).toInt().coerceAtLeast(1)
-        return word.take(n) + "…"
+        val room = maxW - m.body("…")
+        var w = 0f
+        var i = 0
+        while (i < word.length) {
+            val cp = word.codePointAt(i)
+            val cw = if (Metrics.isWide(cp)) m.bodyWide else m.bodyAdv
+            if (w + cw > room && i > 0) break
+            w += cw
+            i += Character.charCount(cp)
+        }
+        return word.substring(0, i) + "…"
+    }
+
+    /** True when all of [tokens] sit on one line of [maxW] without wrapping or cutting anything. */
+    fun fits(tokens: List<Token>, maxW: Float): Boolean {
+        var x = 0f
+        var prev: Token? = null
+        for (t in tokens) {
+            val parts = if (t is Text) t.text.split(' ').filter { it.isNotEmpty() }.map { Text(it, t.tap) } else listOf(t)
+            for (a in parts) {
+                val w = width(a)
+                val g = if (prev == null) 0f else gap(prev, a)
+                if (a !is Cursor && x + g + w > maxW + 0.001f) return false
+                x += g + w
+                prev = a
+            }
+        }
+        return true
     }
 
     private fun atoms(tokens: List<Token>, maxW: Float): List<Token> = tokens.flatMap { t ->
@@ -171,9 +200,15 @@ object HudPlan {
 
 /** Fills the dynamic lines (everything under the date line). */
 class LinePacker(private val flow: FlowLayout) {
+    /** A block whose one-line version fits becomes that one line, so it leaves a line free for the next block. */
+    private fun fold(b: Block, maxW: Float): Block {
+        val one = b.folds.firstOrNull { flow.fits(it, maxW) } ?: return b
+        return b.copy(segments = listOf(one), compact = null, folds = emptyList())
+    }
+
     fun pack(blocks: List<Block>, slots: Int, maxW: Float): List<Line> {
         val out = MutableList<Line>(slots) { emptyList() }
-        for (pl in HudPlan.plan(blocks, slots)) {
+        for (pl in HudPlan.plan(blocks.map { fold(it, maxW) }, slots)) {
             if (pl.compact) {
                 out[pl.start] = flow.layout(pl.block.compact.orEmpty(), maxW, 1).firstOrNull() ?: emptyList()
                 continue

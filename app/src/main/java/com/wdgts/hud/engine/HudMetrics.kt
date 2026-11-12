@@ -22,12 +22,25 @@ object Hud {
     /** As tall as the digits next to it. */
     const val CURSOR_H = 6.4f
     const val TIMER_LEAD = 6.2f
-    const val ICON_W = 10.4f
+    /** Inline app / plugin icon box. Smaller than the pill height: the Nothing glyphs are ~8 units tall, and app silhouettes fill their box. */
+    const val ICON_W = 7.8f
     const val ICONPILL_W = 13.2f
     const val ICONPILL_ICON = 6.6f
     const val BADGE_D = 12.6f
     const val BADGE_WIDE = 15.2f
     const val TIMER_TEXT_SCALE = 0.92f
+    /** Bracket stroke at its top, as a multiple of STROKE; it tapers to STROKE where it turns into the underline. */
+    const val TIMER_TOP_W = 2.1f
+    /** CJK and other double-width text is drawn at this fraction of the body size so it sits with the Latin caps. */
+    const val WIDE_SCALE = 0.84f
+    /** Album-art strip: [colour bar][cover][colour bar], as tall as a pill. */
+    const val ART_BAR = 5.0f
+    const val ART_COVER = 12.0f
+    const val ART_W = 2 * ART_BAR + ART_COVER
+    /** Three overlapping rings that fill at 25 / 50 / 100 % of the track. */
+    const val PROGRESS_D = 8.4f
+    const val PROGRESS_STEP = 4.6f
+    const val PROGRESS_W = 2 * PROGRESS_STEP + PROGRESS_D
     /** Distance from the timer text's baseline up from its underline. */
     const val TIMER_GAP = 4.1f
     const val CHIP_ICON = 6.2f
@@ -52,8 +65,36 @@ object Hud {
     const val HEIGHT_UNITS = LINES * LINE_PITCH + 2 * PAD_V
 }
 
-/** Advance widths in design units. Derived from the font at runtime, see HudRenderer. */
-data class Metrics(val bodyAdv: Float, val pillAdv: Float) {
-    fun body(s: String) = s.codePointCount(0, s.length) * bodyAdv
-    fun pill(s: String) = s.codePointCount(0, s.length) * pillAdv
+/**
+ * Advance widths in design units. Derived from the font at runtime, see HudRenderer.
+ * [bodyWide] / [pillWide] are the advances of double-width characters (CJK, kana, hangul, emoji): the monospace
+ * font has no glyphs for them, so the system falls back to another face that is far wider than one cell.
+ */
+data class Metrics(
+    val bodyAdv: Float,
+    val pillAdv: Float,
+    val bodyWide: Float = bodyAdv * 2f,
+    val pillWide: Float = pillAdv * 2f,
+) {
+    fun body(s: String) = sum(s, bodyAdv, bodyWide)
+    fun pill(s: String) = sum(s, pillAdv, pillWide)
+
+    private fun sum(s: String, narrow: Float, wide: Float): Float {
+        var t = 0f
+        var i = 0
+        while (i < s.length) {
+            val cp = s.codePointAt(i)
+            t += if (isWide(cp)) wide else narrow
+            i += Character.charCount(cp)
+        }
+        return t
+    }
+
+    companion object {
+        /** East Asian wide / fullwidth ranges plus emoji; everything else is one monospace cell. */
+        fun isWide(cp: Int): Boolean =
+            cp in 0x1100..0x115F || cp in 0x2E80..0x303E || cp in 0x3041..0xA4CF || cp in 0xAC00..0xD7A3 ||
+                cp in 0xF900..0xFAFF || cp in 0xFE30..0xFE6F || cp in 0xFF00..0xFF60 || cp in 0xFFE0..0xFFE6 ||
+                cp in 0x1F300..0x1FAFF || cp in 0x20000..0x3FFFD
+    }
 }

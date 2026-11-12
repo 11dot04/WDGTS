@@ -22,7 +22,10 @@ enum class HudGlyph(val res: String) {
 
     EYE("hud_eye"), PHONE("hud_phone"), CALENDAR("hud_calendar"), MOON_DISC("hud_moon_disc"),
     MUSIC_NOTE("hud_music_note"), USB_C("hud_usb_c"),
-    SHAKA("hud_shaka"), STAR4("hud_star4"), ARROW_NE("hud_arrow_ne");
+    SHAKA("hud_shaka"), STAR4("hud_star4"), ARROW_NE("hud_arrow_ne"),
+
+    /** Player styles: stacked rings (after the artist), the circled C used as (c), and the two player buttons. */
+    RINGS("hud_rings"), COPYRIGHT("hud_unit_c"), PAUSE("hud_pause_pill"), CASSETTE("hud_cassette_pill");
 
     val isWeather get() = name in WEATHER
     val isHand get() = name.startsWith("HAND_")
@@ -78,6 +81,12 @@ data class DotRow(val done: Int, val total: Int, override val tap: TapRef? = nul
 /** Rounded corner bracket + underline with text above it (the "7MIN" countdown). */
 data class Timer(val text: String, override val tap: TapRef? = null) : Token
 
+/** [bar][cover][bar]: the album cover between two bars of its dominant colour. [art] is a Bitmap (kept untyped so this file stays pure). */
+data class ArtStrip(val art: Any?, val color: Int, override val tap: TapRef? = null) : Token
+
+/** Three overlapping rings that fill left to right: the first is full at 25 % of the track, the second at 50 %, the third at 100 %. */
+data class ProgressMark(val fraction: Float, override val tap: TapRef? = null) : Token
+
 /** The solid block after the time. */
 data object Cursor : Token
 
@@ -100,6 +109,11 @@ data class Block(
     val optional: Boolean = false,
     /** A one-line version used when only one line is left, e.g. TITLE — SUBTITLE [→] instead of dropping the subtitle. */
     val compact: List<Token>? = null,
+    /**
+     * One-line versions in order of preference. The first that fits the line replaces the block's segments
+     * (a target with its icon and state: HALO FAN [fan] ON [→]); when none fits the segments are used as they are.
+     */
+    val folds: List<List<Token>> = emptyList(),
 )
 
 /**
