@@ -11,6 +11,7 @@ import com.wdgts.hud.engine.HudContent
 import com.wdgts.hud.engine.HudGlyph
 import com.wdgts.hud.engine.HudHeader
 import com.wdgts.hud.engine.HudPlan
+import com.wdgts.hud.engine.HudZones
 import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.Text
 import com.wdgts.hud.engine.Token
@@ -20,8 +21,6 @@ import com.wdgts.widgets.Sched
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.format.TextStyle
-import java.util.Locale
 
 /**
  * Decides what the HUD says right now.
@@ -49,9 +48,7 @@ object HudComposer {
 
         val ranked = ArrayList<Ranked>()
         HudSources.missedCalls()?.let { ranked += Ranked(0, it) }
-        val target = HudSmartspacerSource.top(c) { b ->
-            (b.headline && !greetingOk) || (b.segments.firstOrNull()?.firstOrNull { it is Text } as? Text)?.text?.let { HudSources.isPlayingTitle(it) } == true
-        }
+        val target = HudSmartspacerSource.top(c) { b -> adjustTarget(b, greetingOk) }
         target?.let { ranked += Ranked(1, it) }
         HudSources.music(c)?.let { ranked += Ranked(1, it) }
         HudSources.lookAway(now)?.let { ranked += Ranked(1, it) }
@@ -71,7 +68,7 @@ object HudComposer {
                 headerTap = first.firstNotNullOfOrNull { it.tap }
                 val rest = head.block.segments.filter { it.isNotEmpty() }.drop(1)
                 ranked.remove(head)
-                if (rest.isNotEmpty()) ranked.add(0, Ranked(head.cls, head.block.copy(segments = rest, headline = false, compact = null)))
+                if (rest.isNotEmpty()) ranked.add(0, Ranked(head.cls, head.block.copy(segments = rest, headline = false, compact = null, folds = emptyList())))
             }
         }
 
@@ -91,6 +88,21 @@ object HudComposer {
         val blocks = listOfNotNull(weatherBlock) + ranked.sortedBy { it.cls }.map { it.block }
         val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), headerBadge(c, now, zone, today, zdt.hour))
         return HudContent(header, blocks, headerExtra = if (takeover == null) extra else emptyList(), headerTap = headerTap)
+    }
+
+    /**
+     * What to do with Smartspacer's top target before it is used. Our own now-playing block replaces the music
+     * target. A greeting outside its window loses only its greeting line: its complications (the lines under it)
+     * still come through; a greeting with nothing under it steps aside for the next target.
+     */
+    private fun adjustTarget(b: Block, greetingOk: Boolean): Block? {
+        val first = (b.segments.firstOrNull()?.firstOrNull { it is Text } as? Text)?.text
+        if (first != null && HudSources.isPlayingTitle(first)) return null
+        if (b.headline && !greetingOk) {
+            val rest = b.segments.filter { it.isNotEmpty() }.drop(1)
+            return if (rest.isEmpty()) null else b.copy(segments = rest, headline = false, compact = null, folds = emptyList())
+        }
+        return b
     }
 
     /** One minute per part of the day (05-12, 12-17, 17-22), starting with the first time you look at the phone. */
@@ -121,14 +133,7 @@ object HudComposer {
     }
 
     /** IST, EST, ... or the offset (+5:30) when the zone has no short name. */
-    private fun zoneAbbreviation(zone: ZoneId): String {
-        val s = zone.getDisplayName(TextStyle.SHORT, Locale.ENGLISH).uppercase()
-        if (!s.startsWith("GMT") && !s.startsWith("UTC") && s.length <= 4) return s
-        val secs = java.time.ZonedDateTime.now(zone).offset.totalSeconds
-        val h = secs / 3600
-        val m = Math.abs(secs % 3600) / 60
-        return (if (secs >= 0) "+" else "-") + Math.abs(h) + (if (m > 0) ":" + "%02d".format(m) else "")
-    }
+    private fun zoneAbbreviation(zone: ZoneId): String = HudZones.abbreviation(zone)
 
     /** What each tap zone fires: the date line first, then one per free line. */
     fun lineTaps(content: HudContent, slots: Int): List<TapRef?> =

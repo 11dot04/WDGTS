@@ -8,6 +8,7 @@ import com.wdgts.SettingsActivity
 import com.wdgts.core.Haptics
 import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
+import com.wdgts.music.MusicState
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -34,6 +35,9 @@ object HudActions {
             action == HudSources.DISMISS_LOOK -> {
                 HudSignals.lookDismissedAt = System.currentTimeMillis()
                 HudWidget().refreshAll(ctx.applicationContext)
+            }
+            action == HudSources.MUSIC_TOGGLE -> MusicState.controller?.transportControls?.let {
+                if (MusicState.playing) it.pause() else it.play()
             }
             action == HudSources.DRIK -> start(ctx, Intent(Intent.ACTION_VIEW, Uri.parse(
                 "https://www.drikpanchang.com/panchang/day-panchang.html?date=" +

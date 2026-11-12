@@ -3,9 +3,12 @@ package com.wdgts.hud
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.BatteryManager
 import android.provider.Telephony
 import com.wdgts.core.Prefs
+import com.wdgts.hud.engine.ArtStrip
 import com.wdgts.hud.engine.Block
 import com.wdgts.hud.engine.Badge
 import com.wdgts.hud.engine.BadgeShape
@@ -15,6 +18,7 @@ import com.wdgts.hud.engine.HudText
 import com.wdgts.hud.engine.Icon
 import com.wdgts.hud.engine.IconPill
 import com.wdgts.hud.engine.OutlinePill
+import com.wdgts.hud.engine.ProgressMark
 import com.wdgts.hud.engine.Token
 import com.wdgts.hud.engine.DotRow
 import com.wdgts.hud.engine.GlyphToken
@@ -49,6 +53,7 @@ object HudSources {
     const val CALLS = "CALLS"
     const val DISMISS_LOOK = "DISMISS_LOOK"
     const val DRIK = "DRIK"
+    const val MUSIC_TOGGLE = "MUSIC_TOGGLE"
     const val SETTINGS = "SETTINGS"
     const val APP_PREFIX = "APP:"
 
@@ -156,11 +161,15 @@ object HudSources {
     }
 
     /**
-     * The now-playing block, with the player's own icon. Layouts (see [HudPrefs.musicLayout]):
-     *  0 auto   a stable variant per track, so it does not flicker between updates
-     *  1 plain  [icon] TITLE [→] / ARTIST
-     *  2 by     [icon] TITLE (BY) ARTIST on one line, when it is short enough, else plain
-     *  3 brackets  [icon] TITLE [→] / [ARTIST]
+     * The now-playing block, with the player's own icon. Styles (see [HudPrefs.musicLayout]):
+     *  1 plain      [icon] TITLE [→] / ARTIST
+     *  2 by         [icon] TITLE (BY) ARTIST [rings]
+     *  3 copyright  [icon] TITLE (c) [ARTIST]
+     *  4 progress   [icon] TITLE [three rings, filled to the track position] ARTIST
+     *  5 cover      [icon] TITLE [colour bar | cover | colour bar] ARTIST
+     * 0 picks one per track so it does not flicker between updates. Styles 2-5 take a single line when it fits
+     * (first with the button, then without) and otherwise two: the title line, then the artist with the same ornament.
+     * The button at the end is the arrow, a pause pill or the cassette pill ([HudPrefs.musicControl]).
      * Titles are cleaned of "(Official Video)" and friends.
      */
     fun music(c: Context): Block? {
@@ -171,17 +180,76 @@ object HudSources {
         val pkg = MusicState.pkg
         val t = tap(APP_PREFIX + pkg)
         val lead: Token = if (GlyphMask.forPackage(c, pkg) != null) Icon(AppIconKey(pkg), t) else GlyphToken(HudGlyph.MUSIC_NOTE, t)
-        val arrow = GlyphToken(HudGlyph.FOLLOWUP, t)
-        var layout = HudPrefs.musicLayout(c)
-        if (layout == 0) layout = 1 + Math.floorMod((title + artist).hashCode(), 3)
-        if (artist.isBlank()) return Block("music", listOf(listOf(lead, Text(title, t), arrow)))
-        val fitsOneLine = title.length + artist.length <= 18
-        if (layout == 2 && fitsOneLine) {
-            return Block("music", listOf(listOf(lead, Text(title, t), CountRing("BY", t), Text(artist, t), arrow)))
+        val control: Token = when (HudPrefs.musicControl(c)) {
+            HudPrefs.CONTROL_PAUSE -> GlyphToken(HudGlyph.PAUSE, tap(MUSIC_TOGGLE))
+            HudPrefs.CONTROL_CASSETTE -> GlyphToken(HudGlyph.CASSETTE, tap(MUSIC_TOGGLE))
+            else -> GlyphToken(HudGlyph.FOLLOWUP, t)
         }
-        val second = if (layout == 3) "[$artist]" else artist
-        val compact = listOf(lead, Text(title, t), GlyphToken(HudGlyph.STAR4), Text(artist, t), arrow)
-        return Block("music", listOf(listOf(lead, Text(title, t), arrow), listOf<Token>(Text(second, t))), compact = compact)
+        if (artist.isBlank()) return Block("music", listOf(listOf(lead, Text(title, t), control)))
+
+        val art = MusicState.art
+        var style = HudPrefs.musicLayout(c)
+        if (style == 0) style = 2 + Math.floorMod((title + artist).hashCode(), 4)     // 2..5; plain is only for when it is chosen
+        if (style == 5 && art == null) style = 2
+
+        val name: Token = Text(artist, t)
+        val head = listOf(lead, Text(title, t))
+        // what sits between title and artist on one line, and with the artist on the second line
+        val oneLine: List<Token>
+        val second: List<Token>
+        when (style) {
+            2 -> {
+                oneLine = head + CountRing("BY", t) + name + GlyphToken(HudGlyph.RINGS, t)
+                second = listOf(name, GlyphToken(HudGlyph.RINGS, t))
+            }
+            3 -> {
+                val bracketed = Text("[$artist]", t)
+                oneLine = head + GlyphToken(HudGlyph.COPYRIGHT, t) + bracketed
+                second = listOf(GlyphToken(HudGlyph.COPYRIGHT, t), bracketed)
+            }
+            4 -> {
+                val mark = ProgressMark(MusicState.progress(), t)
+                oneLine = head + mark + name
+                second = listOf(mark, name)
+            }
+            5 -> {
+                val strip = ArtStrip(art, artColor(art), t)
+                oneLine = head + strip + name
+                second = listOf(strip, name)
+            }
+            else -> {
+                oneLine = emptyList()
+                second = listOf(name)
+            }
+        }
+        val compact = listOf(lead, Text(title, t), GlyphToken(HudGlyph.STAR4), name, control)
+        val folds = if (oneLine.isEmpty()) emptyList() else listOf(oneLine + control, oneLine)
+        return Block("music", listOf(head + control, second), compact = compact, folds = folds)
+    }
+
+    @Volatile private var artKey: Bitmap? = null
+    @Volatile private var artValue = Color.GRAY
+
+    /** The cover's dominant colour: saturated pixels count most, and it is lifted so it reads on a dark wallpaper. */
+    private fun artColor(bmp: Bitmap?): Int {
+        if (bmp == null || bmp.isRecycled) return Color.GRAY
+        if (bmp === artKey) return artValue
+        val small = Bitmap.createScaledBitmap(bmp, 12, 12, true)
+        var r = 0f; var g = 0f; var b = 0f; var wsum = 0f
+        val hsv = FloatArray(3)
+        for (y in 0 until small.height) for (x in 0 until small.width) {
+            val px = small.getPixel(x, y)
+            Color.colorToHSV(px, hsv)
+            val w = 0.05f + hsv[1] * hsv[1] * (0.3f + hsv[2])
+            r += Color.red(px) * w; g += Color.green(px) * w; b += Color.blue(px) * w; wsum += w
+        }
+        if (small !== bmp) small.recycle()
+        Color.colorToHSV(Color.rgb((r / wsum).toInt(), (g / wsum).toInt(), (b / wsum).toInt()), hsv)
+        hsv[1] = maxOf(hsv[1], 0.35f)
+        hsv[2] = hsv[2].coerceIn(0.7f, 1f)
+        artValue = Color.HSVToColor(hsv)
+        artKey = bmp
+        return artValue
     }
 
     /** True when [text] is the track that is playing (so Smartspacer's own now-playing target can step aside). */

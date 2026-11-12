@@ -32,7 +32,18 @@ object HudPrefs {
     fun greetingStart(c: Context) = sp(c).getLong("greeting_start", 0L)
     fun startGreeting(c: Context, key: Long, now: Long) = sp(c).edit().putLong("greeting_key", key).putLong("greeting_start", now).apply()
 
-    /** 0 auto (varies per track), 1 plain, 2 "TITLE (BY) ARTIST", 3 brackets. */
+    /**
+     * Now-playing style: 0 varies per track, 1 title then artist, 2 TITLE (BY) ARTIST + rings, 3 TITLE (c) [ARTIST],
+     * 4 TITLE + progress rings + ARTIST, 5 TITLE + album-art strip + ARTIST. Styles 2-5 take one line when they fit.
+     */
     fun musicLayout(c: Context) = sp(c).getInt("music_layout", 0)
     fun setMusicLayout(c: Context, v: Int) = sp(c).edit().putInt("music_layout", v).apply()
+
+    const val CONTROL_ARROW = 0
+    const val CONTROL_PAUSE = 1
+    const val CONTROL_CASSETTE = 2
+
+    /** The button at the end of the now-playing line: the arrow (open the player), a pause pill, or the cassette pill. */
+    fun musicControl(c: Context) = sp(c).getInt("music_control", CONTROL_ARROW)
+    fun setMusicControl(c: Context, v: Int) = sp(c).edit().putInt("music_control", v).apply()
 }

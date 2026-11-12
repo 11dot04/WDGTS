@@ -115,7 +115,7 @@ class HudWidget : ImageWidget() {
             else -> null
         } ?: return@IconPainter
         val cov = coverage.getOrPut(mask) { GlyphMask.coverage(mask) }
-        val target = size * GlyphMask.optical(cov)
+        val target = size * GlyphMask.optical(cov).coerceAtMost(1.08f)   // never bigger than the box: thin artwork used to grow up to 22 %
         val k = target / max(mask.width, mask.height)
         val bw = mask.width * k
         val bh = mask.height * k
