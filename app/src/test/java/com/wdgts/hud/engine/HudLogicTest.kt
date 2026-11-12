@@ -15,7 +15,8 @@ class HudLogicTest {
 
     @Test fun fingersSpellCountdowns() {
         assertEquals(listOf(HudGlyph.HAND_2, HudGlyph.HAND_5), HudRules.hands(7))
-        assertEquals(listOf(HudGlyph.HAND_2, HudGlyph.HAND_5, HudGlyph.HAND_5), HudRules.hands(12))
+        assertEquals(listOf(HudGlyph.HAND_5, HudGlyph.HAND_5), HudRules.hands(10))
+        assertTrue(HudRules.hands(12).isEmpty())      // two hands count to ten; above that only the number speaks
         assertTrue(HudRules.hands(16).isEmpty())
         assertTrue(HudRules.hands(0).isEmpty())
     }
@@ -39,10 +40,10 @@ class HudLogicTest {
     }
 
     @Test fun weatherUsesTheNothingVocabulary() {
-        assertEquals("CLOUDY", HudRules.weatherLook("PARTLY", night = false)?.word)
+        assertEquals("PARTLY SUNNY", HudRules.weatherLook("PARTLY", night = false)?.word)   // as in the Nothing reference
         assertEquals("SUNNY", HudRules.weatherLook("CLEAR", night = false)?.word)
         assertEquals(HudGlyph.MOON, HudRules.weatherLook("CLEAR", night = true)?.glyph)
-        assertEquals("CLEAR", HudRules.weatherLook("CLEAR", night = true)?.word)
+        assertEquals("CLEAR NIGHT", HudRules.weatherLook("CLEAR", night = true)?.word)
         assertEquals("RAIN", HudRules.weatherLook("RAINY", night = false)?.word)
         assertEquals("RAIN", HudRules.weatherLook("DRIZZLE", night = false)?.word)
         assertEquals("HAZE", HudRules.weatherLook("FOG", night = false)?.word)
@@ -57,7 +58,7 @@ class HudLogicTest {
     }
 
     @Test fun weatherBlockLooksLikeTheReference() {
-        val b = HudBlocks.weather(WeatherInfo(21, true, "CLEAR", HudGlyph.MOON))
+        val b = HudBlocks.weather(WeatherInfo(21, true, "CLEAR", listOf(HudGlyph.MOON)))
         assertNull(b.pinLine)
         val t = b.segments.single()
         assertEquals(HudGlyph.TEMP_70_60, (t[0] as GlyphToken).glyph)
