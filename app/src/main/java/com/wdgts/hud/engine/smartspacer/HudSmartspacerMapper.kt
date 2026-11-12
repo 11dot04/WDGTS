@@ -76,10 +76,11 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
     /**
      * The single topmost usable target. Widget targets, remote-view targets and Smartspacer's
      * "Widgets not supported" fallback are skipped, and so is anything that only carries weather.
-     * [skip] lets the caller drop more (a greeting outside its window, a music target we replace with our own).
+     * [adjust] lets the caller rewrite a block (strip a greeting that is out of its window, keeping its
+     * complications) or drop it by returning null (a music target we replace with our own).
      */
-    fun top(targets: List<SmartspaceTarget>, redactSensitive: Boolean, skip: (Block) -> Boolean = { false }): Block? =
-        targets.asSequence().mapNotNull { block(it, redactSensitive) }.firstOrNull { !skip(it) }
+    fun top(targets: List<SmartspaceTarget>, redactSensitive: Boolean, adjust: (Block) -> Block? = { it }): Block? =
+        targets.asSequence().mapNotNull { block(it, redactSensitive) }.mapNotNull(adjust).firstOrNull()
 
     private val WIDGET_FALLBACK = Regex("""(?i)widgets?\s+(are\s+)?not\s+supported""")
 
@@ -110,7 +111,42 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
             t.smartspaceTargetId, segments.take(Hud.BODY_LINES), kind = kind,
             headline = !hide && HudRules.isGreeting(first),
             compact = compactLine(segments),
+            folds = listOfNotNull(foldLine(segments)),
         )
+    }
+
+    private val FILLER = Regex("""(?i)^tap\s+to\b.*""")
+
+    /**
+     * A target and its single value as one line: HALO FAN [fan icon] ON [→]. Only for a title plus one more line
+     * that has no countdown; "TAP TO OPEN" filler is dropped when an icon is there (the arrow already says it).
+     * The layout uses it only when the whole line fits, otherwise the two lines stay.
+     */
+    private fun foldLine(segments: List<List<Token>>): List<Token>? {
+        if (segments.size != 2) return null
+        val title = segments[0]
+        val sub = segments[1]
+        if (title.none { it is Text }) return null
+        if (sub.any { it is Timer || (it is GlyphToken && it.glyph.isHand) }) return null
+        val isArrow = { t: Token -> t is GlyphToken && t.glyph == HudGlyph.FOLLOWUP }
+        val arrow = (title + sub).firstOrNull(isArrow)
+        val head = title.filter { !isArrow(it) }
+        val hasIcon = sub.any { it is Icon || it is IconPill }
+        val tail = ArrayList<Token>()
+        for (t in sub) {
+            when {
+                isArrow(t) -> Unit
+                t is Text && hasIcon && FILLER.matches(t.text) -> Unit
+                t is Text && t.text.length <= 5 -> tail += OutlinePill(t.text, t.tap)      // a state: ON, OFF, 2.4
+                else -> tail += t
+            }
+        }
+        if (tail.isEmpty()) return null
+        val out = ArrayList<Token>(head)
+        if (tail.first() is Text) out += GlyphToken(HudGlyph.STAR4)
+        out += tail
+        if (arrow != null) out += arrow
+        return out
     }
 
     /** TITLE ✦ SUBTITLE [→] for when only one line is left; null when the subtitle carries a countdown. */
@@ -133,7 +169,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         val tap = tapOf(t, a)
         val title = a.title.trim()
         val sub = a.subtitle?.toString()?.trim().orEmpty()
-        build(t, title, sub, tap, null, emptyList(), hide, out)
+        build(t, title, sub, tap, null, "", emptyList(), hide, out)
     }
 
     /** ARSENAL 1–0 HULL CITY [→] / FINAL · 07/11 : a match fits two lines instead of three. */
@@ -154,7 +190,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         return true
     }
 
-    private fun collect(t: SmartspaceTarget, d: BaseTemplateData, hide: Boolean, out: MutableList<List<Token>>) {
+    private fun collect(t: SmartspaceTarget, d: BaseTemplateData, hide: Boolean, out: MutableList<List<Token>>, card: String = "") {
         if (d is HeadToHeadTemplateData && headToHead(t, d, hide, out)) return
         val title = d.primaryItem?.text?.text?.toString()?.trim().orEmpty()
         val tap = tapOf(t, d.primaryItem?.tapAction)
@@ -165,10 +201,10 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
                 val text = item?.text?.text?.toString()?.trim().orEmpty()
                 if (text.isEmpty()) null else Triple(slot, text, tapOf(t, item?.tapAction))
             }
-        build(t, title, sub, tap, "sub".takeIf { SmartspacerIcons.has(tid, "sub") }, comps, hide, out)
+        build(t, title, sub, tap, "${card}sub".takeIf { SmartspacerIcons.has(tid, "${card}sub") }, card, comps, hide, out)
 
         when (d) {
-            is CombinedCardsTemplateData -> d.combinedCardDataList.forEach { collect(t, it, hide, out) }
+            is CombinedCardsTemplateData -> d.combinedCardDataList.forEachIndexed { i, card2 -> collect(t, card2, hide, out, "$card$i:") }
             is SubListTemplateData -> d.subListTexts.take(2).forEach { x ->
                 out += listOf<Token>(Text(txt(x.text.toString(), hide)))
             }
@@ -192,7 +228,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
      *  line 2: [subtitle icon] SUBTITLE or STARTING IN ✌🖐 ⌊10MIN, then one [icon][value] pair per complication
      */
     private fun build(
-        t: SmartspaceTarget, title: String, sub: String, tap: TapRef?, subIconSlot: String?,
+        t: SmartspaceTarget, title: String, sub: String, tap: TapRef?, subIconSlot: String?, card: String,
         comps: List<Triple<String, String, TapRef?>>, hide: Boolean, out: MutableList<List<Token>>,
     ) {
         val tid = t.smartspaceTargetId
@@ -213,7 +249,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
 
         val line = ArrayList<Token>()
         if (arrowAtStart) line += GlyphToken(HudGlyph.FOLLOWUP, tap)
-        if (subIconSlot != null && !hide) line += Icon(SsIconKey(tid, subIconSlot))
+        if (subIconSlot != null && !hide) line += Icon(SsIconKey(tid, subIconSlot), tap)
         if (minutes != null) {
             val rest = rel?.second.orEmpty()
             val lead = when {
@@ -230,7 +266,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         if (comps.isNotEmpty()) {
             if (line.isNotEmpty()) line += Space
             for ((slot, text, ctap) in comps) {
-                if (!hide && SmartspacerIcons.has(tid, slot)) line += IconPill(SsIconKey(tid, slot), ctap)
+                if (!hide && SmartspacerIcons.has(tid, card + slot)) line += IconPill(SsIconKey(tid, card + slot), ctap)
                 line += OutlinePill(txt(text, hide), ctap)
             }
         }

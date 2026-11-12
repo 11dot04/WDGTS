@@ -145,11 +145,11 @@ object HudSmartspacerSource {
     fun weather(): WeatherInfo? = mapper.weather(live())
 
     /** The topmost usable target as a block; sensitive text is masked while the device is locked. */
-    fun top(ctx: Context, skip: (Block) -> Boolean = { false }): Block? {
+    fun top(ctx: Context, adjust: (Block) -> Block? = { it }): Block? {
         val ts = live()
         if (ts.isEmpty()) return null
         val locked = ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        return mapper.top(ts, redactSensitive = locked, skip = skip)
+        return mapper.top(ts, redactSensitive = locked, adjust = adjust)
     }
 
     private fun slotOf(name: String) = when (name) {
@@ -184,7 +184,7 @@ object HudSmartspacerSource {
                 ).forEach { (name, item) ->
                     if (item != null) {
                         val ic = item.icon
-                        appendLine("  $name text='${item.text?.text}' icon=${ic != null} cached=${SmartspacerIcons.has(t.smartspaceTargetId, slotOf(name))} tint=${ic?.shouldTint} desc='${ic?.contentDescription}' tap=${item.tapAction?.id} source=${item.loggingInfo?.let { "${it.packageName}/${it.featureType}" }}")
+                        appendLine("  $name text='${item.text?.text}' icon=${ic != null} cached=${SmartspacerIcons.has(t.smartspaceTargetId, slotOf(name))} [${SmartspacerIcons.status(t.smartspaceTargetId, slotOf(name))}] tint=${ic?.shouldTint} desc='${ic?.contentDescription}' tap=${item.tapAction?.id} source=${item.loggingInfo?.let { "${it.packageName}/${it.featureType}" }}")
                     }
                 }
             }

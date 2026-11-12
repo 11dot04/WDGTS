@@ -30,12 +30,19 @@ data class SsIconKey(val targetId: String, val slot: String) {
 @SuppressLint("RestrictedApi")
 object SmartspacerIcons {
     private val cache = ConcurrentHashMap<String, Bitmap>()
-    private val slots = listOf("primary", "sub", "c1", "c2", "c3")
+    private val sigs = ConcurrentHashMap<String, String>()
+    private val status = ConcurrentHashMap<String, String>()
 
     fun get(key: SsIconKey): Bitmap? = cache[key.id]
     fun has(targetId: String, slot: String): Boolean = cache.containsKey("$targetId|$slot")
 
-    /** Loads every icon of [targets] that is not cached yet, and drops icons of targets that are gone. */
+    /** Why an icon is or is not drawn, for the "Copy Smartspacer targets" dump. */
+    fun status(targetId: String, slot: String): String = status["$targetId|$slot"] ?: "no icon in this slot"
+
+    /**
+     * Loads every icon of [targets], and drops icons of targets that are gone. An icon is loaded again when its
+     * source changes (a plugin that swaps the fan icon on and off keeps the same target id).
+     */
     suspend fun preload(ctx: Context, targets: List<SmartspaceTarget>) = withContext(Dispatchers.IO) {
         val live = HashSet<String>()
         for (t in targets) {
@@ -43,28 +50,35 @@ object SmartspacerIcons {
             for ((slot, icon) in iconsOf(d)) {
                 val key = "${t.smartspaceTargetId}|$slot"
                 live += key
-                if (cache.containsKey(key)) continue
-                load(ctx, icon)?.let { cache[key] = it }
+                val sig = "${icon.icon}|${icon.shouldTint}|${icon.contentDescription}"
+                if (sigs[key] == sig) continue
+                sigs[key] = sig
+                val bmp = load(ctx, icon, key)
+                if (bmp != null) cache[key] = bmp else cache.remove(key)
             }
         }
         cache.keys.removeAll { it !in live }
+        sigs.keys.removeAll { it !in live }
+        status.keys.removeAll { it !in live }
     }
 
-    private fun iconsOf(d: BaseTemplateData): List<Pair<String, Icon>> {
+    /** Slots are "primary", "sub", "c1".."c3"; icons of the cards of a combined target are prefixed "0:", "1:" ... so they never collide. */
+    private fun iconsOf(d: BaseTemplateData, prefix: String = ""): List<Pair<String, Icon>> {
         val items = listOf(
             "primary" to d.primaryItem, "sub" to d.subtitleItem, "c1" to d.subtitleSupplementalItem,
             "c2" to d.supplementalLineItem, "c3" to d.supplementalAlarmItem,
         )
-        val out = items.mapNotNull { (slot, item) -> item?.icon?.let { slot to it } }.toMutableList()
-        if (d is CombinedCardsTemplateData) d.combinedCardDataList.forEach { out += iconsOf(it).filter { (s, _) -> out.none { o -> o.first == s } } }
+        val out = items.mapNotNull { (slot, item) -> item?.icon?.let { prefix + slot to it } }.toMutableList()
+        if (d is CombinedCardsTemplateData) d.combinedCardDataList.forEachIndexed { i, card -> out += iconsOf(card, "$prefix$i:") }
         return out
     }
 
-    private fun load(ctx: Context, icon: Icon): Bitmap? {
-        if (!icon.isLoadable()) return null
+    private fun load(ctx: Context, icon: Icon, key: String): Bitmap? {
+        if (!icon.isLoadable()) return null.also { status[key] = "not loadable (the plugin's icon cannot be resolved)" }
         // getEnabledDrawableOrNull only returns the "disabled state" drawable of a state list (resource icons) and
         // is null for everything else; the SDK's own views fall back to the plain icon, and so must we.
-        val d = runCatching { icon.icon.getEnabledDrawableOrNull(ctx) ?: icon.icon.loadDrawable(ctx) }.getOrNull() ?: return null
+        val d = runCatching { icon.icon.getEnabledDrawableOrNull(ctx) ?: icon.icon.loadDrawable(ctx) }.getOrNull()
+            ?: return null.also { status[key] = "drawable failed to load (package not visible, or resource missing)" }
         val size = 128
         val raw = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val iw = d.intrinsicWidth.takeIf { it > 0 } ?: size
@@ -74,8 +88,10 @@ object SmartspacerIcons {
         val h = (ih * k).toInt().coerceAtLeast(1)
         d.setBounds((size - w) / 2, (size - h) / 2, (size + w) / 2, (size + h) / 2)
         d.draw(Canvas(raw))
-        val trimmed = GlyphMask.trim(raw) ?: return null
-        if (!icon.shouldTint && GlyphMask.coverage(trimmed) > 0.9f) return null
+        val trimmed = GlyphMask.trim(raw) ?: return null.also { status[key] = "empty image" }
+        val cov = GlyphMask.coverage(trimmed)
+        if (!icon.shouldTint && cov > 0.9f) return null.also { status[key] = "rejected: opaque colour image (coverage $cov, tint=false)" }
+        status[key] = "ok ${trimmed.width}x${trimmed.height} coverage=$cov tint=${icon.shouldTint}"
         return trimmed
     }
 }
