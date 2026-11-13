@@ -65,14 +65,18 @@ class SettingsActivity : Activity() {
         note("Google Sans Flex: ${if (gsf) "bundled" else "MISSING, using the system font"}\n" +
             "Roboto Flex: ${if (rf) "bundled" else "MISSING, music titles use other faces"}\n" +
             "Geist Mono (HUD): ${if (gm) "bundled" else "MISSING, the HUD uses the app's mono font"}")
+        val sysFont = Switch(this).apply { text = "System font in widgets (the HUD and music keep theirs)"; isChecked = Prefs.systemFont(this@SettingsActivity) }
+        col.addView(sysFont)
         Fonts.display(this)
-        note("Axes in use: " + (Fonts.fvar ?: "none (variable font not loaded)"))
+        note("Axes in use: " + (Fonts.fvar ?: "none (system font, or variable font not loaded)"))
 
         header("Panchang")
         val lat = field("Latitude", Prefs.lat(this).toString(), true)
         val lon = field("Longitude", Prefs.lon(this).toString(), true)
         val purni = Switch(this).apply { text = "Purnimanta month names"; isChecked = Prefs.purnimanta(this@SettingsActivity) }
         col.addView(purni)
+        val shukla16 = Switch(this).apply { text = "Count Shukla Paksha 16-30 (19 instead of 04)"; isChecked = Prefs.shukla16(this@SettingsActivity) }
+        col.addView(shukla16)
 
         header("Countdown")
         val start = field("Start (yyyy-mm-dd)", LocalDate.ofEpochDay(Prefs.cdStart(this)).toString())
@@ -108,6 +112,8 @@ class SettingsActivity : Activity() {
                 runCatching {
                     Prefs.setLocation(this@SettingsActivity, lat.text.toString().toDouble(), lon.text.toString().toDouble())
                     Prefs.setPurnimanta(this@SettingsActivity, purni.isChecked)
+                    Prefs.setShukla16(this@SettingsActivity, shukla16.isChecked)
+                    Prefs.setSystemFont(this@SettingsActivity, sysFont.isChecked)
                     Prefs.setCountdown(
                         this@SettingsActivity,
                         LocalDate.parse(start.text.toString().trim()).toEpochDay(),
