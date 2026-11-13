@@ -83,4 +83,31 @@ class HudStyleTest {
         val none = listOf<Token>(Text("A"))
         assertEquals(none, ActionPills.apply(none, HudGlyph.ADD).first)
     }
+
+    @Test fun missedCallAbsorbsTheChipsWhenTheyFitTogether() {
+        val packer = LinePacker(flow)
+        val line = listOf<Token>(GlyphToken(HudGlyph.SHAKA), Text("ARYAN"), OutlinePill("+1"))
+        val missed = Block("missed", listOf(line + GlyphToken(HudGlyph.FOLLOWUP)), absorbs = "chips", absorbLine = line)
+        val few = Block("chips", listOf(listOf<Token>(Chip("a", "5"), Chip("b", "1"))), optional = true)
+        val one = packer.pack(listOf(missed, few), 4, maxW)
+        assertTrue(one[0].isNotEmpty())
+        assertTrue(one[1].isEmpty())                                   // chips joined the first line
+        assertTrue(one[0].none { it.token is GlyphToken && (it.token as GlyphToken).glyph == HudGlyph.FOLLOWUP })
+        val many = Block("chips", listOf(List(8) { Chip("i$it", "12") }), optional = true)
+        val two = packer.pack(listOf(missed, many), 4, maxW)
+        assertTrue(two[0].isNotEmpty() && two[1].isNotEmpty())         // too wide: two lines, arrow kept
+    }
+    @Test fun headerDropsTheTimeOnRequest() {
+        val now = ZonedDateTime.of(2026, 11, 13, 10, 22, 0, 0, ZoneId.of("Asia/Kolkata"))
+        val withTime = HudHeader.tokens(now, true, null)
+        val without = HudHeader.tokens(now, true, null, showTime = false)
+        assertTrue(withTime.any { it is Cursor } && withTime.any { it is Text && it.text == "10:22" })
+        assertTrue(without.none { it is Cursor } && without.none { it is Text && it.text == "10:22" })
+    }
+    @Test fun spotifyRecommendationsAreDroppedFromTheArtist() {
+        assertEquals("Far Caspian", HudText.cleanArtist("Far Caspian \u2022 Recommended for You"))
+        assertEquals("Far Caspian", HudText.cleanArtist("Far Caspian - Recommended for you"))
+        assertEquals("Mehdi Hassan", HudText.cleanArtist("Mehdi Hassan - Topic"))
+        assertEquals("Recommended Band", HudText.cleanArtist("Recommended Band"))
+    }
 }
