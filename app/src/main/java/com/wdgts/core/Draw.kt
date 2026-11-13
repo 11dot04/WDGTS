@@ -31,10 +31,15 @@ object Fonts {
      * Drop Google Sans Flex (OFL) at app/src/main/assets/fonts/display.ttf.
      * The CI workflow fetches it automatically; without it we fall back to the system sans.
      */
+    private val system: Typeface by lazy { Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 450, false) }
+    private var flexLoaded = false
+
     fun display(c: Context): Typeface {
-        cache?.let { return it }
+        // setting: the system font (HUD and music never come through here)
+        if (Prefs.systemFont(c)) { fvar = null; return system }
+        cache?.let { if (flexLoaded && fvar == null) fvar = axes(); return it }
         val flex = runCatching { Typeface.createFromAsset(c.assets, "fonts/display.ttf") }.getOrNull()
-        if (flex != null) fvar = axes()
+        if (flex != null) { fvar = axes(); flexLoaded = true }
         val tf = flex ?: Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 450, false)
         cache = tf
         return tf

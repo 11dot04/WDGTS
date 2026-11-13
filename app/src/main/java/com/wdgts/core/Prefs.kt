@@ -11,6 +11,12 @@ object Prefs {
     fun lat(c: Context) = sp(c).getFloat("lat", 28.6139f).toDouble()      // default: New Delhi
     fun lon(c: Context) = sp(c).getFloat("lon", 77.2090f).toDouble()
     fun purnimanta(c: Context) = sp(c).getBoolean("purnimanta", true)     // Drik's default naming
+    /** Shukla Paksha counted 16..30 (19 instead of 04), as the KWGT card did. */
+    fun shukla16(c: Context) = sp(c).getBoolean("shukla16", true)
+    fun setShukla16(c: Context, on: Boolean) = sp(c).edit().putBoolean("shukla16", on).apply()
+    /** Widgets use the system sans instead of Google Sans Flex. The HUD (Geist Mono) and the music widgets keep their own fonts. */
+    fun systemFont(c: Context) = sp(c).getBoolean("system_font", false)
+    fun setSystemFont(c: Context, on: Boolean) = sp(c).edit().putBoolean("system_font", on).apply()
 
     // --- "spoiler" peek at tomorrow; auto-expires when the date changes ---
     fun spoilerOn(c: Context, today: Long) = sp(c).getLong("spoiler_day", -1L) == today
