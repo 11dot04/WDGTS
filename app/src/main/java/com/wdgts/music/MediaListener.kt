@@ -120,7 +120,7 @@ class MediaListener : NotificationListenerService() {
                 if (MusicState.key == newKey) {
                     MusicState.cutout = cut
                     MusicState.cutoutKey = newKey
-                    handler.post { MusicWidgets.refreshAll(this) }
+                    handler.post { MusicWidgets.refreshAll(this); HudWidget().refreshAll(this) }
                 }
             }
         }
