@@ -66,3 +66,10 @@ object Panchang {
         return (sidereal / 30.0).toInt() + 1    // 1 = Mesha .. 12 = Meena
     }
 }
+
+/**
+ * The paksha-day number as shown on the cards. Within the fortnight it is 1..15 for both pakshas; counting the
+ * month the purnimanta way the Krishna fortnight comes first, so Shukla runs 16..30 (04 becomes 19, 05 becomes 20).
+ */
+fun DayPanchang.numberFor(shukla16: Boolean): Int =
+    if (shukla16 && paksha != Paksha.KRISHNA) pakshaDay + 15 else pakshaDay
