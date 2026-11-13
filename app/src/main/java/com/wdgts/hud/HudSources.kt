@@ -163,7 +163,7 @@ object HudSources {
     /**
      * The now-playing block, with the player's own icon. Styles (see [HudPrefs.musicLayout]):
      *  1 plain      [icon] TITLE [→] / ARTIST
-     *  2 by         [icon] TITLE (BY) ARTIST [rings]
+     *  2 by         [icon] TITLE (BY) ARTIST [rings]   (BY: a small knocked-out word in a filled circle)
      *  3 copyright  [icon] TITLE (c) [ARTIST]
      *  4 progress   [icon] TITLE [three rings, filled to the track position] ARTIST
      *  5 cover      [icon] TITLE [colour bar | cover | colour bar] ARTIST
@@ -192,64 +192,46 @@ object HudSources {
         if (style == 0) style = 2 + Math.floorMod((title + artist).hashCode(), 4)     // 2..5; plain is only for when it is chosen
         if (style == 5 && art == null) style = 2
 
-        val name: Token = Text(artist, t)
         val head = listOf(lead, Text(title, t))
-        // what sits between title and artist on one line, and with the artist on the second line
-        val oneLine: List<Token>
-        val second: List<Token>
+        // [orn] sits between title and artist; [name] is the artist as the style writes it
+        val orn: Token
+        val name: Token
+        val tail: List<Token>
         when (style) {
-            2 -> {
-                oneLine = head + CountRing("BY", t) + name + GlyphToken(HudGlyph.RINGS, t)
-                second = listOf(name, GlyphToken(HudGlyph.RINGS, t))
-            }
-            3 -> {
-                val bracketed = Text("[$artist]", t)
-                oneLine = head + GlyphToken(HudGlyph.COPYRIGHT, t) + bracketed
-                second = listOf(GlyphToken(HudGlyph.COPYRIGHT, t), bracketed)
-            }
-            4 -> {
-                val mark = ProgressMark(MusicState.progress(), t)
-                oneLine = head + mark + name
-                second = listOf(mark, name)
-            }
-            5 -> {
-                val strip = ArtStrip(art, artColor(art), t)
-                oneLine = head + strip + name
-                second = listOf(strip, name)
-            }
-            else -> {
-                oneLine = emptyList()
-                second = listOf(name)
-            }
+            2 -> { orn = Badge(BadgeShape.CIRCLE, "BY", t); name = Text(artist, t); tail = listOf(GlyphToken(HudGlyph.RINGS, t)) }
+            3 -> { orn = GlyphToken(HudGlyph.COPYRIGHT, t); name = Text("[$artist]", t); tail = emptyList() }
+            4 -> { orn = ProgressMark(MusicState.progress(), t); name = Text(artist, t); tail = emptyList() }
+            5 -> { val f = artFocus(); orn = ArtStrip(art, f.first, f.second, t); name = Text(artist, t); tail = emptyList() }
+            else -> { orn = Text("·"); name = Text(artist, t); tail = emptyList() }
         }
-        val compact = listOf(lead, Text(title, t), GlyphToken(HudGlyph.STAR4), name, control)
+        val oneLine = if (style == 1) emptyList() else head + orn + name + tail
+        val second: List<Token> = if (style == 1) listOf(name)
+            else if (style == 2) listOf(name) + tail          // BY only makes sense inline; under the title the rings follow the artist
+            else listOf(orn, name)
+        val compact = listOf(lead, Text(title, t), orn, name, control)
         val folds = if (oneLine.isEmpty()) emptyList() else listOf(oneLine + control, oneLine)
         return Block("music", listOf(head + control, second), compact = compact, folds = folds)
     }
 
-    @Volatile private var artKey: Bitmap? = null
-    @Volatile private var artValue = Color.GRAY
+    /** Where the subject of the cover is (0..1), from ML Kit's cut-out: the centre of its opaque pixels. 0.5 / 0.5 until the cut-out is ready. */
+    @Volatile private var focusKey: Bitmap? = null
+    @Volatile private var focusValue = 0.5f to 0.5f
 
-    /** The cover's dominant colour: saturated pixels count most, and it is lifted so it reads on a dark wallpaper. */
-    private fun artColor(bmp: Bitmap?): Int {
-        if (bmp == null || bmp.isRecycled) return Color.GRAY
-        if (bmp === artKey) return artValue
-        val small = Bitmap.createScaledBitmap(bmp, 12, 12, true)
-        var r = 0f; var g = 0f; var b = 0f; var wsum = 0f
-        val hsv = FloatArray(3)
-        for (y in 0 until small.height) for (x in 0 until small.width) {
-            val px = small.getPixel(x, y)
-            Color.colorToHSV(px, hsv)
-            val w = 0.05f + hsv[1] * hsv[1] * (0.3f + hsv[2])
-            r += Color.red(px) * w; g += Color.green(px) * w; b += Color.blue(px) * w; wsum += w
+    private fun artFocus(): Pair<Float, Float> {
+        val cut = MusicState.cutout ?: return 0.5f to 0.5f
+        if (cut.isRecycled) return 0.5f to 0.5f
+        if (cut === focusKey) return focusValue
+        val n = 48
+        val small = Bitmap.createScaledBitmap(cut, n, n, true)
+        var sx = 0f; var sy = 0f; var sw = 0f
+        for (y in 0 until n) for (x in 0 until n) {
+            val a = Color.alpha(small.getPixel(x, y)) / 255f
+            if (a > 0.2f) { sx += x * a; sy += y * a; sw += a }
         }
-        if (small !== bmp) small.recycle()
-        Color.colorToHSV(Color.rgb((r / wsum).toInt(), (g / wsum).toInt(), (b / wsum).toInt()), hsv)
-        hsv[1] = maxOf(hsv[1], 0.35f)
-        hsv[2] = hsv[2].coerceIn(0.7f, 1f)
-        artValue = Color.HSVToColor(hsv)
-        artKey = bmp
-        return artValue
+        if (small !== cut) small.recycle()
+        focusValue = if (sw > 0f) ((sx / sw + 0.5f) / n) to ((sy / sw + 0.5f) / n) else (0.5f to 0.5f)
+        focusKey = cut
+        return focusValue
     }
 
     /** True when [text] is the track that is playing (so Smartspacer's own now-playing target can step aside). */

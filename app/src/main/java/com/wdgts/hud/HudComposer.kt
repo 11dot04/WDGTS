@@ -50,6 +50,7 @@ object HudComposer {
         HudSources.missedCalls()?.let { ranked += Ranked(0, it) }
         val target = HudSmartspacerSource.top(c) { b -> adjustTarget(b, greetingOk) }
         target?.let { ranked += Ranked(1, it) }
+        HudSmartspacerSource.extras(c, target?.id)?.let { ranked += Ranked(2, it) }   // independent complications fill what is left
         HudSources.music(c)?.let { ranked += Ranked(1, it) }
         HudSources.lookAway(now)?.let { ranked += Ranked(1, it) }
         HudSources.streaks(c, now, zone, today, zdt.hour)?.let { ranked += Ranked(1, it) }
