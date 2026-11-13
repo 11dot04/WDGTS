@@ -27,6 +27,7 @@ object HudText {
             .replace(Regex("""(?i)\s*[-–—]\s*topic$"""), "")
             .replace(Regex("""(?i)\s*vevo$"""), "")
             .replace(Regex("""(?i)\s+official$"""), "")
+            .replace(Regex("""(?i)\s*(?:[•·|]|\s[-–—]\s)?\s*(?:recommended|made)\s+for\s+you\s*$"""), "")   // Spotify's "Artist • Recommended for you"
             .trim()
         return s.ifEmpty { raw.trim() }
     }

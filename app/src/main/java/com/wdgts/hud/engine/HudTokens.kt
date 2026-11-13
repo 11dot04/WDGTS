@@ -90,6 +90,9 @@ data class Timer(val text: String, override val tap: TapRef? = null) : Token
  */
 data class ArtStrip(val art: Any?, val focusX: Float = 0.5f, val focusY: Float = 0.5f, override val tap: TapRef? = null) : Token
 
+/** The moon as it is now: a bumpy ring with the lit part filled and craters knocked out. [elongation] is Moon - Sun in degrees (0 new, 180 full). */
+data class MoonPhase(val elongation: Float, override val tap: TapRef? = null) : Token
+
 /** Four overlapping rings; ring n is completely filled once the track passes n x 25 %, never partly ([HudRules.ringsFilled]). */
 data class ProgressMark(val fraction: Float, override val tap: TapRef? = null) : Token
 
@@ -120,6 +123,12 @@ data class Block(
      * (a target with its icon and state: HALO FAN [fan] ON [→]); when none fits the segments are used as they are.
      */
     val folds: List<List<Token>> = emptyList(),
+    /**
+     * When the block with this id is also on screen and its first line fits after [absorbLine] on one line,
+     * the two become one line (missed call + notification chips); otherwise they stay as they are.
+     */
+    val absorbs: String? = null,
+    val absorbLine: List<Token> = emptyList(),
 )
 
 /**

@@ -6,8 +6,11 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 object HudHeader {
-    /** MON [9][NOV] 12:27▮, with an optional badge (day/night glyph or time-zone burst) between the month and the time. */
-    fun tokens(now: ZonedDateTime, is24h: Boolean, badge: Token? = null, locale: Locale = Locale.ENGLISH): List<Token> {
+    /**
+     * MON [9][NOV] 12:27▮, with an optional badge (day/night glyph or time-zone burst) between the month and the time.
+     * [showTime] false drops the time and its cursor (the temperature takes that room; the status bar has the time anyway).
+     */
+    fun tokens(now: ZonedDateTime, is24h: Boolean, badge: Token? = null, locale: Locale = Locale.ENGLISH, showTime: Boolean = true): List<Token> {
         val dow = now.dayOfWeek.getDisplayName(TextStyle.SHORT, locale).uppercase(locale).take(3)
         val mon = now.month.getDisplayName(TextStyle.SHORT, locale).uppercase(locale).take(3)
         val time = DateTimeFormatter.ofPattern(if (is24h) "HH:mm" else "h:mm", locale).format(now)
@@ -18,10 +21,12 @@ object HudHeader {
         out += Space
         if (badge != null) {
             out += badge
-            out += Space
+            if (showTime) out += Space
         }
-        out += Text(time)
-        out += Cursor
+        if (showTime) {
+            out += Text(time)
+            out += Cursor
+        }
         return out
     }
 }

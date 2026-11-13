@@ -36,12 +36,14 @@ object Hud {
     /** CJK and other double-width text is drawn at this fraction of the body size so it sits with the Latin caps. */
     const val WIDE_SCALE = 0.84f
     /** Album-art strip: the cover cropped to a landscape strip as tall as a pill, centred on its subject. */
-    const val ART_W = 22.0f
+    const val ART_W = 18.0f
     /** Four overlapping rings, each filling completely at 25, 50, 75 and 100 % of the track. */
     const val PROGRESS_RINGS = 4
     const val PROGRESS_D = 8.0f
     const val PROGRESS_STEP = 4.4f
     const val PROGRESS_W = (PROGRESS_RINGS - 1) * PROGRESS_STEP + PROGRESS_D
+    /** The moon-phase glyph's disc. */
+    const val MOON_D = 9.6f
     /** The small filled circle with a knocked-out word (BY). */
     const val BADGE_CIRCLE_TEXT = 0.7f
     /** Distance from the timer text's baseline up from its underline. */

@@ -26,6 +26,7 @@ class FlowLayout(
         is Cursor -> Hud.CURSOR_W
         is Space -> m.bodyAdv
         is ArtStrip -> Hud.ART_W
+        is MoonPhase -> Hud.MOON_D
         is ProgressMark -> Hud.PROGRESS_W
     }
 
@@ -229,10 +230,30 @@ class LinePacker(private val flow: FlowLayout) {
         return b.copy(segments = listOf(one), compact = null, folds = emptyList())
     }
 
+    /** A block that [Block.absorbs] another takes its line when the two fit together on one; the absorbed block is dropped. */
+    private fun absorb(blocks: List<Block>, maxW: Float): List<Block> {
+        var out = blocks
+        for (b in blocks) {
+            val id = b.absorbs ?: continue
+            val other = out.firstOrNull { it.id == id } ?: continue
+            val theirs = other.segments.firstOrNull { it.isNotEmpty() } ?: continue
+            val joined = b.absorbLine + Space + theirs
+            if (!flow.fits(joined, maxW)) continue
+            out = out.mapNotNull { x ->
+                when (x.id) {
+                    b.id -> b.copy(segments = listOf(joined), compact = null, folds = emptyList(), absorbs = null)
+                    id -> null
+                    else -> x
+                }
+            }
+        }
+        return out
+    }
+
     fun pack(blocks: List<Block>, slots: Int, maxW: Float): List<Line> {
         val out = MutableList<Line>(slots) { emptyList() }
         var last: HudGlyph? = null
-        for (pl in HudPlan.plan(blocks.map { fold(it, maxW) }, slots)) {
+        for (pl in HudPlan.plan(absorb(blocks, maxW).map { fold(it, maxW) }, slots)) {
             if (pl.compact) {
                 val (toks, g) = ActionPills.apply(pl.block.compact.orEmpty(), last)
                 last = g

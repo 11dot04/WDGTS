@@ -199,6 +199,7 @@ class HudRenderer(
             is Timer -> timer(c, t, x, cy, w, u, ink)
             is ArtStrip -> artStrip(c, t, x, cy, w, u)
             is ProgressMark -> progress(c, t, x, cy, u, ink)
+            is MoonPhase -> MoonGlyph.draw(c, x + w / 2f, cy, w / 2f, t.elongation.toDouble(), ink, Hud.STROKE * u)
             is Cursor -> {
                 fill.color = ink
                 val base = cy + Hud.BODY_CAP * u / 2f
