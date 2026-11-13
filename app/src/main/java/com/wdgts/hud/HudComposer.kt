@@ -12,6 +12,7 @@ import com.wdgts.hud.engine.HudGlyph
 import com.wdgts.hud.engine.HudHeader
 import com.wdgts.hud.engine.HudPlan
 import com.wdgts.hud.engine.HudZones
+import com.wdgts.hud.engine.MoonPhase
 import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.Text
 import com.wdgts.hud.engine.Token
@@ -87,7 +88,8 @@ object HudComposer {
         }
 
         val blocks = listOfNotNull(weatherBlock) + ranked.sortedBy { it.cls }.map { it.block }
-        val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), headerBadge(c, now, zone, today, zdt.hour))
+        // the temperature chip takes the time's place on line 1: the status bar already shows the time
+        val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), headerBadge(c, now, zone, today, zdt.hour), showTime = extra.isEmpty())
         return HudContent(header, blocks, headerExtra = if (takeover == null) extra else emptyList(), headerTap = headerTap)
     }
 
@@ -123,7 +125,7 @@ object HudComposer {
     private fun headerBadge(c: Context, now: Long, zone: ZoneId, today: LocalDate, hour: Int): Token? = when (HudPrefs.badgeMode(c)) {
         HudPrefs.BADGE_DAY_NIGHT -> {
             val night = if (HudPrefs.dayNightBySun(c)) HudSources.isNight(c, now, zone, today) else hour !in 6..17
-            GlyphToken(if (night) HudGlyph.MOON else HudGlyph.SUN)
+            if (night) HudSources.moonElongation(c, zone, today)?.let { MoonPhase(it) } ?: GlyphToken(HudGlyph.MOON) else GlyphToken(HudGlyph.SUN)
         }
         HudPrefs.BADGE_ZONE -> Badge(BadgeShape.BURST, zoneAbbreviation(zone))
         HudPrefs.BADGE_ZONE_AWAY -> {

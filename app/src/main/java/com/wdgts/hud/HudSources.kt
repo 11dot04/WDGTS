@@ -17,6 +17,7 @@ import com.wdgts.hud.engine.CountRing
 import com.wdgts.hud.engine.HudText
 import com.wdgts.hud.engine.Icon
 import com.wdgts.hud.engine.IconPill
+import com.wdgts.hud.engine.MoonPhase
 import com.wdgts.hud.engine.OutlinePill
 import com.wdgts.hud.engine.ProgressMark
 import com.wdgts.hud.engine.Token
@@ -32,6 +33,7 @@ import com.wdgts.music.MusicState
 import com.wdgts.panchang.Astro
 import com.wdgts.panchang.Panchang
 import com.wdgts.panchang.Paksha
+import com.wdgts.panchang.numberFor
 import com.wdgts.panchang.sunsetMs
 import com.wdgts.widgets.GlyphMask
 import com.wdgts.widgets.STREAKS
@@ -65,13 +67,19 @@ object HudSources {
         "com.discord", "com.slack", "com.google.android.gm", "com.snapchat.android",
     )
 
-    /** [SHAKA] MISSED · NAME [→]: call me back. */
+    /**
+     * [SHAKA] NAME (+2) [→]: call me back. One caller is named, the others are a "+n". There is no "MISSED": the shaka
+     * says it. When the notification chips fit on the same line they join it (and the arrow steps aside).
+     */
     fun missedCalls(): Block? {
         val missed = HudSignals.missed
         if (missed.isEmpty()) return null
         val t = tap(CALLS)
-        val text = if (missed.size == 1) "MISSED · ${missed[0].uppercase()}" else "MISSED CALLS · ${missed.size}"
-        return Block("missed", listOf(listOf(GlyphToken(HudGlyph.SHAKA, t), Text(text, t), GlyphToken(HudGlyph.FOLLOWUP, t))))
+        val line = ArrayList<Token>()
+        line += GlyphToken(HudGlyph.SHAKA, t)
+        line += Text(missed[0].uppercase(), t)
+        if (missed.size > 1) line += OutlinePill("+${missed.size - 1}", t)
+        return Block("missed", listOf(line + GlyphToken(HudGlyph.FOLLOWUP, t)), absorbs = "chips", absorbLine = line.toList())
     }
 
     /** [EYE] LOOK AWAY · 20 FT [→] / ⌊20S */
@@ -95,8 +103,20 @@ object HudSources {
             Panchang.compute(today, zone, Prefs.lat(c), Prefs.lon(c), Prefs.purnimanta(c))
         }.getOrNull() ?: return null
         val t = tap(DRIK)
-        val text = "${if (d.paksha == Paksha.KRISHNA) "KP" else "SP"} ${d.pakshaDay} · ${d.month.uppercase()}"
-        return Block("tithi", listOf(listOf(GlyphToken(HudGlyph.MOON_DISC, t), Text(text, t), GlyphToken(HudGlyph.FOLLOWUP, t))))
+        val text = "${if (d.paksha == Paksha.KRISHNA) "KP" else "SP"} ${d.numberFor(Prefs.shukla16(c))} · ${d.month.uppercase()}"
+        return Block("tithi", listOf(listOf(MoonPhase(d.elongation.toFloat(), t), Text(text, t), GlyphToken(HudGlyph.FOLLOWUP, t))))
+    }
+
+    @Volatile private var moonDay = Long.MIN_VALUE
+    @Volatile private var moonE = 0f
+
+    /** Moon - Sun elongation for [today] (sunrise value, cached per day), for the moon-phase glyph. */
+    fun moonElongation(c: Context, zone: ZoneId, today: LocalDate): Float? {
+        if (today.toEpochDay() == moonDay) return moonE
+        val d = runCatching { Panchang.compute(today, zone, Prefs.lat(c), Prefs.lon(c), Prefs.purnimanta(c)) }.getOrNull() ?: return null
+        moonE = d.elongation.toFloat()
+        moonDay = today.toEpochDay()
+        return moonE
     }
 
     /** 3 STREAKS LEFT / ●●●○○○ ⌊2H 10M, shown from 22:00 until midnight while any streak is still open. */
