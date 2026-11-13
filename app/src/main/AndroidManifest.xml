@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
 
+    <!-- Plugin icons need their package to be visible, and not every plugin declares the intents below. Sideloaded, so fine. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
     <!-- lets us resolve launch intents and monochrome icons for installed apps -->
     <queries>
         <intent>
@@ -15,6 +18,13 @@
         <!-- lets the HUD find and bind Smartspacer -->
         <intent>
             <action android:name="com.kieronquinn.app.smartspacer.MANAGER" />
+        </intent>
+        <!-- Smartspacer plugins (Google Health, Google Home ...): their icons are resources of their own package -->
+        <intent>
+            <action android:name="com.kieronquinn.app.smartspacer.TARGET" />
+        </intent>
+        <intent>
+            <action android:name="com.kieronquinn.app.smartspacer.COMPLICATION" />
         </intent>
     </queries>
 
