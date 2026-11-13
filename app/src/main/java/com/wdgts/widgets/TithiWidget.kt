@@ -17,7 +17,9 @@ import com.wdgts.R
 import com.wdgts.core.*
 import com.wdgts.panchang.DayPanchang
 import com.wdgts.panchang.Panchang
+import com.wdgts.hud.engine.MoonGlyph
 import com.wdgts.panchang.Paksha
+import com.wdgts.panchang.numberFor
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -102,7 +104,7 @@ class TithiWidget : AppWidgetProvider() {
 
             // ---- text block -------------------------------------------------------------
             val kp = if (d.paksha == Paksha.KRISHNA) "KP" else "SP"
-            val num = String.format(Locale.US, "%02d,", d.pakshaDay)
+            val num = String.format(Locale.US, "%02d,", d.numberFor(Prefs.shukla16(ctx)))
             val endZ = Instant.ofEpochMilli(d.tithiEndMs).atZone(zone)
             val endLabel = "UPTO " + timeFmt.format(endZ).uppercase() +
                 if (endZ.toLocalDate().isAfter(d.date)) " +1" else ""
@@ -127,15 +129,12 @@ class TithiWidget : AppWidgetProvider() {
             label(month, left, y2, ms, p.accent, tf, fvar = mv)
             val tithiLeft = right - measureText(tithi, size, tf, 0f, fv)
             label(kp, tithiLeft, y1, size, p.muted, tf, fvar = fv)            // KP/SP shares the tithi name's left edge
-            // moon face, inline on the KP/SP line, in the empty space to its left
+            // the moon phase sits between SP/KP and the number, centred in the gap
+            val spEnd = tithiLeft + measureText(kp, size, tf, 0f, fv)
+            val numStart = right - measureText(num, size, tf, 0f, fv)
             val moonR = size * 0.36f
-            if (tithiLeft - left > moonR * 2f + 3f * u) {
-                val mcx = left + moonR + 0.6f * u
-                val mcy = y1 - size * 0.36f
-                drawCircle(mcx, mcy, moonR + 1.4f * u, Paint(Paint.ANTI_ALIAS_FLAG).also {
-                    it.style = Paint.Style.STROKE; it.color = alpha(p.faint, 200); it.strokeWidth = 0.4f * u
-                })
-                moon(mcx, mcy, moonR, d.elongation, p.onSurface, alpha(p.faint, 120))
+            if (numStart - spEnd > moonR * 2f + 4f * u) {
+                MoonGlyph.draw(this, (spEnd + numStart) / 2f, y1 - size * 0.34f, moonR, d.elongation, p.onSurface, 0.45f * u)
             }
             label(num, right, y1, size, p.accent, tf, Paint.Align.RIGHT, fvar = fv)
 
@@ -168,7 +167,7 @@ class TithiWidget : AppWidgetProvider() {
                 label("DRIK", left, b1, bs, ink, tf, fvar = bv)
                 val pw = label("PNCHNG", left, b2, bs, ink, tf, fvar = bv)
                 // the link arrow's right edge lines up with the right edge of PNCHNG
-                arrow(left + pw - 2.1f * u, b1 - bs * 0.36f, 2.1f * u, ink, 0.55f * u, diagonal = true)
+                arrow(left + pw - 2.4f * u, b1 - bs * 0.40f, 2.4f * u, ink, 0.85f * u, diagonal = true)
                 nextPebbles(right, btnCy, 6.0f * u, ink, p.surface)
             } else {
                 label("SPLR", left, b1, bs, ink, tf, fvar = bv)
@@ -176,8 +175,8 @@ class TithiWidget : AppWidgetProvider() {
                 val mx = 0.50f * w
                 label("MINUS", mx, b1, bs, ink, tf, fvar = bv)
                 val ow = label("ONE", mx, b2, bs, ink, tf, fvar = bv)
-                arrow(mx + ow + 4.2f * u, b2 - bs * 0.36f, 2.9f * u, ink, 0.55f * u, diagonal = false)
-                nextHalves(right, btnCy, 5.4f * u, ink, tf, bs * 0.62f)
+                arrow(mx + ow + 4.2f * u, b2 - bs * 0.36f, 2.9f * u, ink, 0.65f * u, diagonal = false)
+                nextHalves(right, btnCy, 5.4f * u, ink, tf, bs * 0.74f)
             }
         }
 
@@ -185,7 +184,7 @@ class TithiWidget : AppWidgetProvider() {
         private fun Canvas.arrow(cx: Float, cy: Float, s: Float, color: Int, stroke: Float, diagonal: Boolean) {
             val pnt = Paint(Paint.ANTI_ALIAS_FLAG).also {
                 it.style = Paint.Style.STROKE; it.color = color; it.strokeWidth = stroke
-                it.strokeCap = Paint.Cap.ROUND; it.strokeJoin = Paint.Join.ROUND
+                it.strokeCap = Paint.Cap.BUTT; it.strokeJoin = Paint.Join.MITER; it.strokeMiter = 6f
             }
             val path = Path()
             if (diagonal) {
@@ -205,29 +204,36 @@ class TithiWidget : AppWidgetProvider() {
         private fun Canvas.nextPebbles(rightX: Float, cy: Float, r: Float, color: Int, hole: Int) {
             val f = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color }
             val discCx = rightX - r
-            val fat = RectF(rightX - 3.05f * r, cy - r, rightX - 1.6f * r, cy + r)
-            drawOval(RectF(rightX - 3.85f * r, cy - r, rightX - 3.3f * r, cy + r), f)
+            val fat = RectF(rightX - 3.1f * r, cy - r, rightX - 1.7f * r, cy + r)
+            val thin = RectF(rightX - 4.3f * r, cy - r, rightX - 3.55f * r, cy + r)
+            drawOval(thin, f)
             drawOval(fat, f)
             drawCircle(discCx, cy, r, f)
+            // one thin arrow runs from the thin pebble through the fat one into the disc, open head
             val pnt = Paint(Paint.ANTI_ALIAS_FLAG).also {
-                it.style = Paint.Style.STROKE; it.color = hole; it.strokeWidth = 0.2f * r
-                it.strokeCap = Paint.Cap.ROUND; it.strokeJoin = Paint.Join.ROUND
+                it.style = Paint.Style.STROKE; it.color = hole; it.strokeWidth = 0.12f * r
+                it.strokeCap = Paint.Cap.BUTT; it.strokeJoin = Paint.Join.MITER; it.strokeMiter = 6f
             }
-            val x0 = fat.centerX()
-            val x1 = discCx + 0.4f * r
+            val x0 = thin.centerX()
+            val x1 = discCx + 0.62f * r
             val path = Path()
             path.moveTo(x0, cy); path.lineTo(x1, cy)
-            path.moveTo(x1 - 0.4f * r, cy - 0.4f * r); path.lineTo(x1, cy); path.lineTo(x1 - 0.4f * r, cy + 0.4f * r)
+            path.moveTo(x1 - 0.5f * r, cy - 0.5f * r); path.lineTo(x1, cy); path.lineTo(x1 - 0.5f * r, cy + 0.5f * r)
             drawPath(path, pnt)
         }
 
         /** Spoiler "NEXT": two overlapping half-discs and the word set vertically along the right edge (reads downward). */
         private fun Canvas.nextHalves(rightX: Float, cy: Float, r: Float, color: Int, tf: android.graphics.Typeface, ts: Float) {
-            val f = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color }
-            val dw = r * 0.95f
-            val flatR = rightX - ts * 1.5f - dw                       // flat edge of the front half-disc
-            drawArc(RectF(flatR - 0.6f * dw - dw, cy - r, flatR - 0.6f * dw + dw, cy + r), -90f, 180f, true, f)
-            drawArc(RectF(flatR - dw, cy - r, flatR + dw, cy + r), -90f, 180f, true, f)
+            val ring = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color; it.style = Paint.Style.STROKE; it.strokeCap = Paint.Cap.BUTT }
+            val flat = rightX - ts * 1.55f                 // where the half-rings are cut flat
+            val outerW = r * 0.34f
+            ring.strokeWidth = outerW                      // front ring: thick
+            drawArc(RectF(flat - r + outerW / 2f, cy - r + outerW / 2f, flat + r - outerW / 2f, cy + r - outerW / 2f), -90f, 180f, false, ring)
+            val r2 = r * 0.78f                             // ring behind it: smaller, thinner, shifted left
+            val innerW = r * 0.22f
+            ring.strokeWidth = innerW
+            val c2 = flat - r * 0.78f
+            drawArc(RectF(c2 - r2 + innerW / 2f, cy - r2 + innerW / 2f, c2 + r2 - innerW / 2f, cy + r2 - innerW / 2f), -90f, 180f, false, ring)
             val tx = rightX - ts * 0.5f
             save()
             rotate(90f, tx, cy)

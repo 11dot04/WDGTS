@@ -13,6 +13,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.Drawable
@@ -123,8 +124,30 @@ class StreaksWidget : AppWidgetProvider() {
                         else extractGlyph(render(ic, 256))
                     }
                 }
-                mask?.let { cropToAlpha(it) }
+                mask?.let { cropToAlpha(it) }?.let { g -> if (GlyphMask.coverage(g) > 0.85f) innerGlyph(g)?.let { cropToAlpha(it) } ?: g else g }
             }.getOrNull()
+        }
+
+        /**
+         * An icon whose artwork is one solid shape (Lumosity's badge) would draw as a blacked-out blob. The drawing
+         * inside it is what we want: keep whatever differs from the shape's own dominant colour, as alpha.
+         */
+        private fun innerGlyph(src: Bitmap): Bitmap? {
+            val w = src.width; val h = src.height
+            val px = IntArray(w * h)
+            src.getPixels(px, 0, w, 0, 0, w, h)
+            val counts = HashMap<Int, Int>()
+            for (c in px) if (Color.alpha(c) > 200) counts.merge(((Color.red(c) shr 3) shl 10) or ((Color.green(c) shr 3) shl 5) or (Color.blue(c) shr 3), 1, Int::plus)
+            val top = counts.maxByOrNull { it.value }?.key ?: return null
+            val br = ((top shr 10) and 31) shl 3; val bg = ((top shr 5) and 31) shl 3; val bb = (top and 31) shl 3
+            for (i in px.indices) {
+                val c = px[i]
+                val dist = sqrt(((Color.red(c) - br).let { it * it } + (Color.green(c) - bg).let { it * it } + (Color.blue(c) - bb).let { it * it }).toFloat())
+                val a = ((dist - 28f) / 90f).coerceIn(0f, 1f) * (Color.alpha(c) / 255f)
+                px[i] = (((a * 255).toInt()) shl 24) or 0x00FFFFFF
+            }
+            val out = Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
+            return out.takeIf { GlyphMask.coverage(it) in 0.04f..0.75f }
         }
 
         /** Material "public" globe (Apache 2.0): filled disc ring with continents, drawn in a 24-unit box. */
@@ -160,14 +183,20 @@ class StreaksWidget : AppWidgetProvider() {
             }
         }
 
-        /** Small shield with the remaining count, top-right of a tile. */
+        /** A small, quiet shield: filled in a translucent ink with the remaining count knocked out of it. */
         private fun Canvas.shield(cx: Float, cy: Float, s: Float, n: Int, color: Int, mono: android.graphics.Typeface) {
+            val layer = saveLayer(cx - s * 1.4f, cy - s * 1.4f, cx + s * 1.4f, cy + s * 1.4f, null)
             val p = Path()
             p.moveTo(cx, cy - s); p.lineTo(cx + s * 0.85f, cy - s * 0.62f); p.lineTo(cx + s * 0.85f, cy + s * 0.1f)
             p.quadTo(cx + s * 0.8f, cy + s * 0.72f, cx, cy + s); p.quadTo(cx - s * 0.8f, cy + s * 0.72f, cx - s * 0.85f, cy + s * 0.1f)
             p.lineTo(cx - s * 0.85f, cy - s * 0.62f); p.close()
-            drawPath(p, Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.STROKE; it.color = color; it.strokeWidth = s * 0.16f; it.strokeJoin = Paint.Join.ROUND })
-            label("$n", cx, cy + s * 0.34f, s * 0.95f, color, mono, Paint.Align.CENTER)
+            drawPath(p, Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.FILL; it.color = alpha(color, 120) })
+            val clear = Paint(Paint.ANTI_ALIAS_FLAG).also {
+                it.typeface = mono; it.textSize = s * 1.05f; it.textAlign = Paint.Align.CENTER
+                it.xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+            }
+            drawText("$n", cx, cy + s * 0.36f, clear)
+            restoreToCount(layer)
         }
 
         private fun Canvas.drawStreaks(ctx: Context, w: Int, h: Int, today: Long) {
@@ -184,6 +213,7 @@ class StreaksWidget : AppWidgetProvider() {
             val gap = 2.8f * u
             val cw = (w - 2 * inset) / 4f
             val ch = (h - 2 * inset) / 4f
+            val countSize = (ch - gap) * 0.60f          // every count, in every tile, is this size
 
             for (def in STREAKS) {
                 val st = Streaks.state(ctx, def, today)
@@ -202,13 +232,13 @@ class StreaksWidget : AppWidgetProvider() {
                 when {
                     cells >= 4 -> {      // big: icon top-left, light-weight count bottom-right
                         icon(ctx, def, rect.left + 11f * u, rect.top + 11f * u, 15f * u, ink)
-                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, 17f * u, tf, wght = 270, wdthMax = 100)
+                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, countSize, tf, wght = 270, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.bottom - 3.4f * u, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
-                        if (rule.cap > 0) shield(rect.right - 6.5f * u, rect.top + 7f * u, 3.6f * u, st.shields, ink, mono)
+                        if (rule.cap > 0) shield(rect.right - 5.6f * u, rect.top + 6.2f * u, 3.0f * u, st.shields, ink, mono)
                     }
                     cells == 2 -> {      // wide: icon left, count right
                         icon(ctx, def, rect.left + rect.height() * 0.52f, rect.centerY(), rect.height() * 0.64f, ink)
-                        val (sz, fv) = fitByAxis(num, rect.width() * 0.5f, rect.height() * 0.6f, tf, wght = 270, wdthMax = 100)
+                        val (sz, fv) = fitByAxis(num, rect.width() * 0.62f, countSize, tf, wght = 270, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.centerY() + sz * 0.35f, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                     }
                     else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.62f, ink)
