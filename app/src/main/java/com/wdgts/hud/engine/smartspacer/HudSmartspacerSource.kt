@@ -152,6 +152,14 @@ object HudSmartspacerSource {
         return mapper.top(ts, redactSensitive = locked, adjust = adjust)
     }
 
+    /** The independent complications (see [HudSmartspacerMapper.extras]) as one block of pairs; null when there are none. */
+    fun extras(ctx: Context, excludeId: String?): Block? {
+        val ts = live()
+        if (ts.isEmpty()) return null
+        val locked = ctx.getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        return mapper.extras(ts, redactSensitive = locked, excludeId = excludeId)
+    }
+
     private fun slotOf(name: String) = when (name) {
         "primary" -> "primary"; "subtitle" -> "sub"; "subtitleSupplemental" -> "c1"
         "supplementalLine" -> "c2"; else -> "c3"

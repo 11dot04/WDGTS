@@ -82,6 +82,37 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
     fun top(targets: List<SmartspaceTarget>, redactSensitive: Boolean, adjust: (Block) -> Block? = { it }): Block? =
         targets.asSequence().mapNotNull { block(it, redactSensitive) }.mapNotNull(adjust).firstOrNull()
 
+    /**
+     * Smartspacer has two kinds of complications: those that come with a target (they live and die with it) and
+     * independent ones that take whatever room the target leaves. The independent ones ride on a container target
+     * (the greeting; hideIfNoComplications = true), so the lines under that target's own title are collected here as
+     * one line of [icon pill][value pill] pairs, whichever target is on top. [excludeId] is the target already shown.
+     */
+    fun extras(targets: List<SmartspaceTarget>, redactSensitive: Boolean, excludeId: String?): Block? {
+        val tokens = ArrayList<Token>()
+        for (t in targets) {
+            if (!t.hideIfNoComplications || t.smartspaceTargetId == excludeId) continue
+            val b = block(t, redactSensitive) ?: continue
+            val lines = b.segments.filter { it.isNotEmpty() }.let { if (b.headline) it.drop(1) else it }
+            for (line in lines) {
+                var i = 0
+                while (i < line.size) {
+                    val tk = line[i]
+                    val next = line.getOrNull(i + 1)
+                    when {
+                        tk is Icon && next is Text -> { tokens += IconPill(tk.key, tk.tap); tokens += OutlinePill(next.text, next.tap ?: tk.tap); i += 2; continue }
+                        tk is Text -> tokens += OutlinePill(tk.text, tk.tap)
+                        tk is IconPill || tk is OutlinePill -> tokens += tk
+                        else -> Unit
+                    }
+                    i++
+                }
+            }
+        }
+        if (tokens.isEmpty()) return null
+        return Block("extras", listOf(tokens), optional = true)
+    }
+
     private val WIDGET_FALLBACK = Regex("""(?i)widgets?\s+(are\s+)?not\s+supported""")
 
     private fun isWidgetTarget(t: SmartspaceTarget): Boolean {
@@ -143,13 +174,13 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         }
         if (tail.isEmpty()) return null
         val out = ArrayList<Token>(head)
-        if (tail.first() is Text) out += GlyphToken(HudGlyph.STAR4)
+        if (tail.first() is Text) out += Text("·")
         out += tail
-        if (arrow != null) out += arrow
+        if (arrow != null && !hasIcon) out += arrow      // an icon and its state say enough: HALO FAN [fan] (ON)
         return out
     }
 
-    /** TITLE ✦ SUBTITLE [→] for when only one line is left; null when the subtitle carries a countdown. */
+    /** TITLE · SUBTITLE [→] for when only one line is left; null when the subtitle carries a countdown. */
     private fun compactLine(segments: List<List<Token>>): List<Token>? {
         if (segments.size < 2) return null
         val title = segments[0]
@@ -158,7 +189,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         val plain = sub.firstOrNull { it is Text } as? Text ?: return null
         val out = ArrayList<Token>()
         out += title.filter { it !is GlyphToken || it.glyph != HudGlyph.FOLLOWUP }
-        out += GlyphToken(HudGlyph.STAR4)
+        out += Text("·")
         out += plain
         (title + sub).firstOrNull { it is GlyphToken && it.glyph == HudGlyph.FOLLOWUP }?.let { out += it }
         return out
@@ -249,7 +280,9 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
 
         val line = ArrayList<Token>()
         if (arrowAtStart) line += GlyphToken(HudGlyph.FOLLOWUP, tap)
-        if (subIconSlot != null && !hide) line += Icon(SsIconKey(tid, subIconSlot), tap)
+        // a line that names a time already carries the speak glyph, the pill, the hands and the bracket: no icon
+        val namesTime = timeBound || (sub.isNotEmpty() && !hide && HudRules.mentionsTime(sub))
+        if (subIconSlot != null && !hide && !namesTime) line += Icon(SsIconKey(tid, subIconSlot), tap)
         if (minutes != null) {
             val rest = rel?.second.orEmpty()
             val lead = when {
