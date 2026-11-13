@@ -20,7 +20,7 @@ class FlowLayout(
         is DotRow -> t.total * Hud.DOT + (t.total - 1).coerceAtLeast(0) * Hud.DOT_GAP
         is IconPill -> Hud.ICONPILL_W
         is CountRing -> maxOf(Hud.PILL_H, m.pill(t.text) + 4.6f)
-        is Badge -> if (t.text.length <= 2) Hud.BADGE_D else Hud.BADGE_WIDE
+        is Badge -> if (t.shape == BadgeShape.CIRCLE) Hud.PILL_H else if (t.text.length <= 2) Hud.BADGE_D else Hud.BADGE_WIDE
         is Icon -> Hud.ICON_W
         is Timer -> Hud.TIMER_LEAD + m.body(t.text) * Hud.TIMER_TEXT_SCALE
         is Cursor -> Hud.CURSOR_W
@@ -130,6 +130,29 @@ class FlowLayout(
     }
 }
 
+/**
+ * The action pill at the end of a line takes turns between the follow-up pill, the add pill and the plain north-east
+ * arrow, so a screen full of targets does not show a column of identical pills. The choice is stable per line (it
+ * comes from the line's own text), and never the same as the pill on the line before. All three fire the same tap.
+ */
+object ActionPills {
+    private val CYCLE = listOf(HudGlyph.FOLLOWUP, HudGlyph.ADD, HudGlyph.ARROW_NE)
+
+    fun pick(seed: String, previous: HudGlyph?): HudGlyph {
+        var i = Math.floorMod(seed.hashCode(), CYCLE.size)
+        if (CYCLE[i] == previous) i = (i + 1) % CYCLE.size
+        return CYCLE[i]
+    }
+
+    /** Swaps the follow-up pill in [tokens] for this line's pick; returns the new tokens and the glyph used (or [previous] if the line has none). */
+    fun apply(tokens: List<Token>, previous: HudGlyph?): Pair<List<Token>, HudGlyph?> {
+        if (tokens.none { it is GlyphToken && it.glyph == HudGlyph.FOLLOWUP }) return tokens to previous
+        val seed = tokens.filterIsInstance<Text>().joinToString(" ") { it.text }
+        val g = pick(seed, previous)
+        return tokens.map { if (it is GlyphToken && it.glyph == HudGlyph.FOLLOWUP) GlyphToken(g, it.tap) else it } to g
+    }
+}
+
 /** A block assigned to dynamic lines [start, start + lines); [compact] = its one-line version was chosen. */
 class Placement(val block: Block, val start: Int, val lines: Int, val compact: Boolean = false)
 
@@ -208,14 +231,19 @@ class LinePacker(private val flow: FlowLayout) {
 
     fun pack(blocks: List<Block>, slots: Int, maxW: Float): List<Line> {
         val out = MutableList<Line>(slots) { emptyList() }
+        var last: HudGlyph? = null
         for (pl in HudPlan.plan(blocks.map { fold(it, maxW) }, slots)) {
             if (pl.compact) {
-                out[pl.start] = flow.layout(pl.block.compact.orEmpty(), maxW, 1).firstOrNull() ?: emptyList()
+                val (toks, g) = ActionPills.apply(pl.block.compact.orEmpty(), last)
+                last = g
+                out[pl.start] = flow.layout(toks, maxW, 1).firstOrNull() ?: emptyList()
                 continue
             }
             val s = pl.block.segments.filter { it.isNotEmpty() }
             for (i in 0 until pl.lines) {
-                out[pl.start + i] = flow.layout(s[i], maxW, 1).firstOrNull() ?: emptyList()
+                val (toks, g) = ActionPills.apply(s[i], last)
+                last = g
+                out[pl.start + i] = flow.layout(toks, maxW, 1).firstOrNull() ?: emptyList()
             }
         }
         return out

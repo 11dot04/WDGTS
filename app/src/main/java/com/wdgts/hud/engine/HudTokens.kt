@@ -25,7 +25,10 @@ enum class HudGlyph(val res: String) {
     SHAKA("hud_shaka"), STAR4("hud_star4"), ARROW_NE("hud_arrow_ne"),
 
     /** Player styles: stacked rings (after the artist), the circled C used as (c), and the two player buttons. */
-    RINGS("hud_rings"), COPYRIGHT("hud_unit_c"), PAUSE("hud_pause_pill"), CASSETTE("hud_cassette_pill");
+    RINGS("hud_rings"), COPYRIGHT("hud_unit_c"), PAUSE("hud_pause_pill"), CASSETTE("hud_cassette_pill"),
+
+    /** The add pill (a plus knocked out of a stadium); with FOLLOWUP and ARROW_NE it takes turns as the action pill ([ActionPills]). */
+    ADD("hud_add_pill");
 
     val isWeather get() = name in WEATHER
     val isHand get() = name.startsWith("HAND_")
@@ -37,7 +40,7 @@ enum class HudGlyph(val res: String) {
 }
 
 /** The brutalist badge shapes drawn in code (text knocked out of them). */
-enum class BadgeShape { BURST, CLOVER }
+enum class BadgeShape { BURST, CLOVER, CIRCLE }
 
 sealed interface Token {
     val tap: TapRef? get() = null
@@ -81,10 +84,13 @@ data class DotRow(val done: Int, val total: Int, override val tap: TapRef? = nul
 /** Rounded corner bracket + underline with text above it (the "7MIN" countdown). */
 data class Timer(val text: String, override val tap: TapRef? = null) : Token
 
-/** [bar][cover][bar]: the album cover between two bars of its dominant colour. [art] is a Bitmap (kept untyped so this file stays pure). */
-data class ArtStrip(val art: Any?, val color: Int, override val tap: TapRef? = null) : Token
+/**
+ * The album cover cropped to a landscape strip, centred on its subject ([focusX], [focusY] in 0..1, from ML Kit's
+ * subject cut-out; 0.5 when there is none). [art] is a Bitmap, kept untyped so this file stays pure.
+ */
+data class ArtStrip(val art: Any?, val focusX: Float = 0.5f, val focusY: Float = 0.5f, override val tap: TapRef? = null) : Token
 
-/** Three overlapping rings that fill left to right: the first is full at 25 % of the track, the second at 50 %, the third at 100 %. */
+/** Four overlapping rings; ring n is completely filled once the track passes n x 25 %, never partly ([HudRules.ringsFilled]). */
 data class ProgressMark(val fraction: Float, override val tap: TapRef? = null) : Token
 
 /** The solid block after the time. */

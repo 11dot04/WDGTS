@@ -92,4 +92,12 @@ object HudRules {
     private val GREETING = Regex("""(?i)^(good\s+(morning|afternoon|evening|night)|hello|hi)\b""")
 
     fun isGreeting(title: String): Boolean = GREETING.containsMatchIn(title.trim())
+
+    /** How many of the four progress rings are full: 0 below 25 %, 1 from 25 %, 2 from 50 %, 3 from 75 %, 4 at 100 %. */
+    fun ringsFilled(fraction: Float): Int = (fraction.coerceIn(0f, 1f) * Hud.PROGRESS_RINGS + 0.0001f).toInt().coerceIn(0, Hud.PROGRESS_RINGS)
+
+    private val TIME_TEXT = Regex("""(?i)\b\d{1,2}:\d{2}\b|\b\d{1,3}\s*(?:min|mins|minutes|hrs?|hours?|h|m)\b|\b[ap]\.?m\.?\b|\b(?:today|tomorrow|tonight|now|soon)\b""")
+
+    /** A subtitle that names a time or a duration ("at 20:50", "in 7 min", "tomorrow"): such a line already carries enough graphics, so it gets no icon. */
+    fun mentionsTime(s: String): Boolean = TIME_TEXT.containsMatchIn(s)
 }

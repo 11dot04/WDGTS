@@ -48,6 +48,10 @@ class HudRenderer(
     private val knock = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
     }
+    private val outlineKnock = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+    }
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     /** digit height / em and advance / em, measured from the font instead of assumed. */
@@ -205,30 +209,33 @@ class HudRenderer(
     }
 
     /**
-     * ⌊ with the number above a long underline. The vertical stroke is thick at the top and tapers down to the
-     * underline's thickness as it turns the corner (a filled shape, not a stroked line); the underline ends in a round cap.
+     * ⌊ with the number above a long underline, measured from the reference: a stem about twice as thick as the
+     * underline, running straight down, then a generous corner that thins into the underline (a filled shape, not a
+     * stroked line), ending in a round cap.
      */
     private fun timer(c: Canvas, t: Timer, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
         val ph = Hud.PILL_H * u
-        val s = Hud.STROKE * u
+        val stem = Hud.TIMER_STEM_W * u
+        val line = Hud.TIMER_LINE_W * u
         val bottom = cy + ph / 2f                      // lower edge of the underline
-        val baseline = bottom - s / 2f - Hud.TIMER_GAP * u
+        val baseline = bottom - line / 2f - Hud.TIMER_GAP * u
         val cap = Hud.BODY_CAP * Hud.TIMER_TEXT_SCALE * u
         val top = baseline - cap
-        val rr = 4f * u                                // outer radius of the corner
-        val ri = rr - s                                // inner radius
-        val cyc = bottom - rr                          // centre height of the corner arc
-        val topW = s * Hud.TIMER_TOP_W
+        val rr = Hud.TIMER_RADIUS * u                  // outer radius of the corner
+        val cyc = bottom - rr                          // where the stem starts to turn
         val endX = x + w
+        val k = 0.5523f
+        val rxi = rr - stem                            // inner curve: an ellipse quarter from stem width to line width
+        val ryi = rr - line
         val p = Path().apply {
             moveTo(x, top)
             lineTo(x, cyc)
             arcTo(RectF(x, cyc - rr, x + 2f * rr, cyc + rr), 180f, -90f)
-            lineTo(endX - s / 2f, bottom)
-            arcTo(RectF(endX - s, bottom - s, endX, bottom), 90f, -180f)
-            lineTo(x + rr, bottom - s)
-            arcTo(RectF(x + rr - ri, cyc - ri, x + rr + ri, cyc + ri), 90f, 90f)
-            lineTo(x + topW, top)
+            lineTo(endX - line / 2f, bottom)
+            arcTo(RectF(endX - line, bottom - line, endX, bottom), 90f, -180f)
+            lineTo(x + rr, bottom - line)
+            cubicTo(x + rr - k * rxi, cyc + ryi, x + stem, cyc + k * ryi, x + stem, cyc)
+            lineTo(x + stem, top)
             close()
         }
         fill.color = ink
@@ -238,48 +245,57 @@ class HudRenderer(
         c.drawText(t.text, x + Hud.TIMER_LEAD * u, baseline, text)
     }
 
-    /** [bar][cover][bar]: the cover centre-cropped between two bars of its dominant colour, rounded as one piece. */
+    /** The cover cropped to a landscape strip as tall as a pill, centred on the subject (rounded as one piece). */
     private fun artStrip(c: Canvas, t: ArtStrip, x: Float, cy: Float, w: Float, u: Float) {
         val h = Hud.PILL_H * u
         val top = cy - h / 2f
-        val rect = RectF(x, top, x + w, top + h)
+        val dst = RectF(x, top, x + w, top + h)
+        val bmp = t.art as? Bitmap ?: return
+        if (bmp.isRecycled || bmp.width <= 0 || bmp.height <= 0) return
+        val aspect = dst.width() / dst.height()
+        var sw = bmp.width.toFloat()
+        var sh = sw / aspect
+        if (sh > bmp.height) { sh = bmp.height.toFloat(); sw = sh * aspect }
+        val l = (t.focusX * bmp.width - sw / 2f).coerceIn(0f, bmp.width - sw).toInt()
+        val tp = (t.focusY * bmp.height - sh / 2f).coerceIn(0f, bmp.height - sh).toInt()
         val save = c.save()
-        c.clipPath(Path().apply { addRoundRect(rect, 0.9f * u, 0.9f * u, Path.Direction.CW) })
-        fill.color = t.color
-        c.drawRect(rect, fill)
-        val bmp = t.art as? Bitmap
-        if (bmp != null && !bmp.isRecycled && bmp.width > 0 && bmp.height > 0) {
-            val dst = RectF(x + Hud.ART_BAR * u, top, x + (Hud.ART_BAR + Hud.ART_COVER) * u, top + h)
-            val aspect = dst.width() / dst.height()
-            var sw = bmp.width.toFloat()
-            var sh = sw / aspect
-            if (sh > bmp.height) { sh = bmp.height.toFloat(); sw = sh * aspect }
-            val l = ((bmp.width - sw) / 2f).toInt()
-            val tp = ((bmp.height - sh) / 2f).toInt()
-            c.drawBitmap(bmp, Rect(l, tp, l + sw.toInt(), tp + sh.toInt()), dst, bitmapPaint)
-        }
+        c.clipPath(Path().apply { addRoundRect(dst, 0.9f * u, 0.9f * u, Path.Direction.CW) })
+        c.drawBitmap(bmp, Rect(l, tp, l + sw.toInt(), tp + sh.toInt()), dst, bitmapPaint)
         c.restoreToCount(save)
     }
 
-    /** Three rings, each filled left to right: full at 25 %, 50 % and 100 % of the track. */
+    /**
+     * Four overlapping rings. Ring n is completely filled once the track passes n x 25 % and never partly. An empty
+     * ring's outline is cut away wherever it crosses a filled ring, and shows everywhere else.
+     */
     private fun progress(c: Canvas, t: ProgressMark, x: Float, cy: Float, u: Float, ink: Int) {
         val d = Hud.PROGRESS_D * u
         val r = d / 2f
         val s = Hud.STROKE * u
-        val f = t.fraction.coerceIn(0f, 1f)
-        val parts = floatArrayOf(f / 0.25f, (f - 0.25f) / 0.25f, (f - 0.5f) / 0.5f).map { it.coerceIn(0f, 1f) }
-        val cx = FloatArray(3) { x + r + it * Hud.PROGRESS_STEP * u }
+        val n = HudRules.ringsFilled(t.fraction)
+        val cx = FloatArray(Hud.PROGRESS_RINGS) { x + r + it * Hud.PROGRESS_STEP * u }
+        val filled = Path().apply { for (i in 0 until n) addCircle(cx[i], cy, r, Path.Direction.CW) }
+        val layer = c.saveLayer(x - 2f, cy - r - 2f, x + Hud.PROGRESS_W * u + 2f, cy + r + 2f, null)
+        fill.color = ink
+        if (n > 0) c.drawPath(filled, fill)
         stroke.strokeWidth = s
         stroke.color = ink
-        fill.color = ink
-        for (i in 0..2) c.drawCircle(cx[i], cy, r - s / 2f, stroke)
-        for (i in 0..2) {
-            if (parts[i] <= 0f) continue
-            val save = c.save()
-            c.clipRect(cx[i] - r, cy - r, cx[i] - r + d * parts[i], cy + r)
-            c.drawCircle(cx[i], cy, r, fill)
-            c.restoreToCount(save)
+        outlineKnock.strokeWidth = s
+        for (i in n until Hud.PROGRESS_RINGS) {
+            if (n > 0) {
+                val a = c.save()
+                c.clipOutPath(filled)
+                c.drawCircle(cx[i], cy, r - s / 2f, stroke)
+                c.restoreToCount(a)
+                val b = c.save()
+                c.clipPath(filled)
+                c.drawCircle(cx[i], cy, r - s / 2f, outlineKnock)     // cut the outline out of the filled ring
+                c.restoreToCount(b)
+            } else {
+                c.drawCircle(cx[i], cy, r - s / 2f, stroke)
+            }
         }
+        c.restoreToCount(layer)
     }
 
     private fun burst(cx: Float, cy: Float, r: Float, spikes: Int = 12, inner: Float = 0.8f): Path {
@@ -307,7 +323,7 @@ class HudRenderer(
     /** Burst or clover with a short text knocked out; the text shrinks as it gets longer. */
     private fun badge(c: Canvas, t: Badge, x: Float, cy: Float, w: Float, u: Float, ink: Int) {
         val cx = x + w / 2f
-        val r = Hud.BADGE_D * u / 2f
+        val r = (if (t.shape == BadgeShape.CIRCLE) Hud.PILL_H else Hud.BADGE_D) * u / 2f
         val layer = c.saveLayer(x - 4f, cy - r - 4f, x + w + 4f, cy + r + 4f, null)
         fill.color = ink
         when (t.shape) {
@@ -319,8 +335,9 @@ class HudRenderer(
                 fill.pathEffect = null
             }
             BadgeShape.CLOVER -> c.drawPath(clover(cx, cy, r), fill)
+            BadgeShape.CIRCLE -> c.drawCircle(cx, cy, w / 2f, fill)
         }
-        val k = when (t.text.length) { 0, 1 -> 1f; 2 -> 0.82f; 3 -> 0.62f; else -> 0.5f }
+        val k = if (t.shape == BadgeShape.CIRCLE) Hud.BADGE_CIRCLE_TEXT else when (t.text.length) { 0, 1 -> 1f; 2 -> 0.82f; 3 -> 0.62f; else -> 0.5f }
         knock.textSize = size(Hud.PILL_CAP, u) * k
         val capPx = Hud.PILL_CAP * u * k
         c.drawText(t.text, cx - knock.measureText(t.text) / 2f, cy + capPx / 2f, knock)

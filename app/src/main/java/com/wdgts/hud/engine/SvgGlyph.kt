@@ -20,6 +20,36 @@ class SvgGlyph(
 ) {
     class Ring(val rect: RectF, val radius: Float, val strokeWidth: Float)
 
+    /** Bounds of the filled artwork itself, ignoring the padding the viewport may carry. */
+    val ink: RectF by lazy {
+        val r = RectF()
+        var first = true
+        val tmp = RectF()
+        for (p in fills) {
+            p.computeBounds(tmp, true)
+            if (tmp.isEmpty) continue
+            if (first) { r.set(tmp); first = false } else r.union(tmp)
+        }
+        if (first) r.set(0f, 0f, width, height)
+        r
+    }
+
+    /**
+     * The same artwork scaled so its ink is [inkHeight] tall, centred in a box [boxHeight] high and a little wider than the ink.
+     * For glyphs drawn small inside a big viewport (the shaka), so every icon reads at the same size. Rings are not carried over.
+     */
+    fun fitted(inkHeight: Float, boxHeight: Float, sidePad: Float = 1.2f): SvgGlyph {
+        val b = ink
+        val k = inkHeight / b.height()
+        val w = b.width() * k + 2f * sidePad
+        val m = android.graphics.Matrix().apply {
+            postTranslate(-b.centerX(), -b.centerY())
+            postScale(k, k)
+            postTranslate(w / 2f, boxHeight / 2f)
+        }
+        return SvgGlyph(w, boxHeight, fills.map { p -> Path(p).also { it.transform(m) } }, emptyList())
+    }
+
     fun draw(c: Canvas, x: Float, y: Float, unit: Float, fill: Paint, stroke: Paint) {
         val save = c.save()
         c.translate(x, y)

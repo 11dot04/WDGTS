@@ -17,7 +17,7 @@ class GlyphRegistry(context: Context, private val dir: String = "glyphs") {
             assets.open("$dir/${g.res}.svg").bufferedReader().use { SvgGlyph.parse(it.readText()) }
         } catch (e: IOException) {
             null
-        }
+        }?.let { raw -> FIT_INK[g]?.let { raw.fitted(it, Hud.PILL_H) } ?: raw }
         cache[g] = parsed
         return parsed
     }
@@ -29,6 +29,9 @@ class GlyphRegistry(context: Context, private val dir: String = "glyphs") {
     }
 
     private companion object {
+        /** Glyphs drawn small inside their viewport, rescaled so their ink is this tall (units). The speak glyph is 8 tall, the other lead icons 8 to 9. */
+        val FIT_INK = mapOf(HudGlyph.SHAKA to 8.4f)
+
         val FALLBACK = mapOf(
             HudGlyph.SUN to (10f to Hud.PILL_H), HudGlyph.MOON to (10f to Hud.PILL_H),
             HudGlyph.CLOUD to (10f to Hud.PILL_H), HudGlyph.BREEZY to (8f to Hud.PILL_H),

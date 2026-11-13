@@ -29,24 +29,27 @@ object Hud {
     const val BADGE_D = 12.6f
     const val BADGE_WIDE = 15.2f
     const val TIMER_TEXT_SCALE = 0.92f
-    /** Bracket stroke at its top, as a multiple of STROKE; it tapers to STROKE where it turns into the underline. */
-    const val TIMER_TOP_W = 2.1f
+    /** Timer bracket, measured from the reference (unit = 6.655 px there): stem 13 px, underline 6 px, corner radius about 5.4. */
+    const val TIMER_STEM_W = 1.95f
+    const val TIMER_LINE_W = 0.9f
+    const val TIMER_RADIUS = 5.4f
     /** CJK and other double-width text is drawn at this fraction of the body size so it sits with the Latin caps. */
     const val WIDE_SCALE = 0.84f
-    /** Album-art strip: [colour bar][cover][colour bar], as tall as a pill. */
-    const val ART_BAR = 5.0f
-    const val ART_COVER = 12.0f
-    const val ART_W = 2 * ART_BAR + ART_COVER
-    /** Three overlapping rings that fill at 25 / 50 / 100 % of the track. */
-    const val PROGRESS_D = 8.4f
-    const val PROGRESS_STEP = 4.6f
-    const val PROGRESS_W = 2 * PROGRESS_STEP + PROGRESS_D
+    /** Album-art strip: the cover cropped to a landscape strip as tall as a pill, centred on its subject. */
+    const val ART_W = 22.0f
+    /** Four overlapping rings, each filling completely at 25, 50, 75 and 100 % of the track. */
+    const val PROGRESS_RINGS = 4
+    const val PROGRESS_D = 8.0f
+    const val PROGRESS_STEP = 4.4f
+    const val PROGRESS_W = (PROGRESS_RINGS - 1) * PROGRESS_STEP + PROGRESS_D
+    /** The small filled circle with a knocked-out word (BY). */
+    const val BADGE_CIRCLE_TEXT = 0.7f
     /** Distance from the timer text's baseline up from its underline. */
     const val TIMER_GAP = 4.1f
-    const val CHIP_ICON = 6.2f
-    const val CHIP_PAD_L = 2.4f
-    const val CHIP_PAD_R = 3.2f
-    const val CHIP_GAP = 1.2f
+    const val CHIP_ICON = 5.6f
+    const val CHIP_PAD_L = 3.6f
+    const val CHIP_PAD_R = 3.8f
+    const val CHIP_GAP = 1.4f
     const val DOT = 2.8f
     const val DOT_GAP = 1.8f
     const val OUTLINE_PAD = 3.6f
