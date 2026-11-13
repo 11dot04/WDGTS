@@ -49,4 +49,38 @@ class HudStyleTest {
         assertTrue(HudZones.abbreviation(ZoneId.of("Asia/Thimphu"), at).isNotEmpty())
     }
     @Test fun badgeTextFits() { assertTrue(HudZones.abbreviation(ZoneId.of("Asia/Kolkata")).length <= 3) }
+
+    @Test fun ringsFillOnlyAtMilestones() {
+        assertEquals(0, HudRules.ringsFilled(0f))
+        assertEquals(0, HudRules.ringsFilled(0.24f))
+        assertEquals(1, HudRules.ringsFilled(0.25f))
+        assertEquals(1, HudRules.ringsFilled(0.49f))
+        assertEquals(2, HudRules.ringsFilled(0.5f))
+        assertEquals(3, HudRules.ringsFilled(0.75f))
+        assertEquals(3, HudRules.ringsFilled(0.99f))
+        assertEquals(4, HudRules.ringsFilled(1f))
+    }
+    @Test fun timesAreRecognisedInSubtitles() {
+        assertTrue(HudRules.mentionsTime("at 20:50"))
+        assertTrue(HudRules.mentionsTime("in 7 min"))
+        assertTrue(HudRules.mentionsTime("Tomorrow"))
+        assertTrue(HudRules.mentionsTime("9 AM"))
+        assertTrue(!HudRules.mentionsTime("On"))
+        assertTrue(!HudRules.mentionsTime("2.06 mi"))
+        assertTrue(!HudRules.mentionsTime("Tap to open"))
+    }
+    @Test fun actionPillsTakeTurnsAndNeverRepeatNeighbours() {
+        var prev: HudGlyph? = null
+        for (seed in listOf("MISSED · ARYAN", "WATER THE PLANTS.", "HALO FAN", "WEEKLY SYNC", "A", "B", "C", "D")) {
+            val g = ActionPills.pick(seed, prev)
+            assertTrue(g != prev)
+            prev = g
+        }
+        assertEquals(ActionPills.pick("X", null), ActionPills.pick("X", null))     // stable per line
+        val (toks, used) = ActionPills.apply(listOf(Text("A"), GlyphToken(HudGlyph.FOLLOWUP, TapRef("local", "x"))), null)
+        assertTrue((toks[1] as GlyphToken).glyph == used)
+        assertEquals("x", (toks[1] as GlyphToken).tap?.actionId)
+        val none = listOf<Token>(Text("A"))
+        assertEquals(none, ActionPills.apply(none, HudGlyph.ADD).first)
+    }
 }
