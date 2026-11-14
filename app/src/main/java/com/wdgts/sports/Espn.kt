@@ -21,8 +21,8 @@ object Espn {
     class Fetch(val ok: Boolean, val match: Match?)
 
     /**
-     * Uses each competition's scoreboard over a date window (2 days back, 40 ahead). The per-team "schedule"
-     * endpoint only lists played matches, which is why the widget used to be stuck on the last result.
+     * Uses each competition's scoreboard over a date window; the per-team "schedule" endpoint only lists played
+     * matches unless asked for fixtures. Every request and its outcome goes to [Prefs.espnDebug] for the settings screen.
      */
     fun fetch(c: Context): Fetch {
         val id = Prefs.teamId(c)
@@ -30,24 +30,26 @@ object Espn {
         val today = java.time.LocalDate.now()
         val now = System.currentTimeMillis()
         val dbg = StringBuilder()
+        var anyOk = false
 
         // Stage 1: a small window (2 days back, 14 ahead) keeps each response light enough for a phone on mobile data.
         val near = scan(leagues, today.minusDays(2), today.plusDays(14), id, dbg, "near")
-        val anyOk = near.ok
+        anyOk = anyOk || near.ok
         var pick = select(near.matches, now)
         // Stage 2: nothing in that window (international break, cup draw pending): look further ahead.
-        if (pick == null && anyOk) {
+        if (pick == null) {
             val far = scan(leagues, today.plusDays(15), today.plusDays(75), id, dbg, "far")
+            anyOk = anyOk || far.ok
             pick = select(far.matches, now)
         }
-        // Stage 3: still nothing; ask ESPN's per-team fixture list directly.
-        if (pick == null && anyOk) {
+        // Stage 3: still nothing, or the scoreboards would not answer: ask ESPN's per-team fixture list directly.
+        if (pick == null) {
             val sched = ArrayList<Match>()
             for (lg in leagues) {
-                val json = Http.get("https://site.api.espn.com/apis/site/v2/sports/soccer/$lg/teams/$id/schedule?fixture=true", 15000)
-                if (json == null) { dbg.append("team $lg: no response\n"); continue }
+                val json = request("team $lg", listOf("$BASE/$lg/teams/$id/schedule?fixture=true"), dbg) ?: continue
+                anyOk = true
                 val ms = parse(json, lg, id)
-                dbg.append("team $lg: ${json.length / 1024} KB, ${ms.size} ours\n")
+                dbg.append("  ${ms.size} ours\n")
                 sched += ms
             }
             pick = select(sched, now)
@@ -60,7 +62,20 @@ object Espn {
         return Fetch(true, pick)
     }
 
+    private const val BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer"
+
     private class Scan(val ok: Boolean, val matches: List<Match>)
+
+    /** First of [urls] that answers 2xx; each failed attempt is logged with its HTTP status or exception. */
+    private fun request(label: String, urls: List<String>, dbg: StringBuilder): String? {
+        for (u in urls) {
+            val r = Http.probe(u, 15000)
+            val body = r.body
+            if (body != null) { dbg.append("$label: ${body.length / 1024} KB\n"); return body }
+            dbg.append("$label: HTTP ${r.code}").append(r.err?.let { " $it" } ?: "").append('\n')
+        }
+        return null
+    }
 
     /** One scoreboard request per league over [from]..[to]; [ok] when at least one league answered. */
     private fun scan(
@@ -72,11 +87,14 @@ object Espn {
         val all = ArrayList<Match>()
         var ok = false
         for (lg in leagues) {
-            val json = Http.get("https://site.api.espn.com/apis/site/v2/sports/soccer/$lg/scoreboard?dates=$range&limit=300", 15000)
-            if (json == null) { dbg.append("$tag $lg: no response\n"); continue }
+            // with the limit first, then without in case ESPN rejects that parameter
+            val json = request("$tag $lg", listOf(
+                "$BASE/$lg/scoreboard?dates=$range&limit=300",
+                "$BASE/$lg/scoreboard?dates=$range",
+            ), dbg) ?: continue
             ok = true
             val ms = parse(json, lg, id)
-            dbg.append("$tag $lg: ${json.length / 1024} KB, ${ms.size} ours\n")
+            dbg.append("  ${ms.size} ours\n")
             all += ms
         }
         return Scan(ok, all)
