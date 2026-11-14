@@ -284,10 +284,15 @@ object HudSources {
         return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text(word), OutlinePill("$level%"))))
     }
 
+    // BatteryManager's charging-policy constants are hidden API (not in the public SDK), so these are their AOSP values.
+    // getIntProperty is wrapped in runCatching wherever it is used, so an unknown id only yields "no limit detected".
+    private const val CHARGING_POLICY_PROPERTY = 9
+    private const val CHARGING_POLICY_DEFAULT = 1
+
     /** True when the system's charging policy is something other than the default (adaptive / long-life: it stops at about 80 %). */
     private fun chargeLimited(bm: BatteryManager): Boolean {
-        val p = runCatching { bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGING_POLICY) }.getOrDefault(0)
-        return p != 0 && p != Int.MIN_VALUE && p != BatteryManager.CHARGING_POLICY_DEFAULT
+        val p = runCatching { bm.getIntProperty(CHARGING_POLICY_PROPERTY) }.getOrDefault(0)
+        return p != 0 && p != Int.MIN_VALUE && p != CHARGING_POLICY_DEFAULT
     }
 
     /** Milliseconds until [target] percent from the charge counter (µAh) and the current (µA); -1 when the device reports neither. */
@@ -311,7 +316,7 @@ object HudSources {
         return listOf(
             "plugged=${bi?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)} status=${bi?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)} level=${bi?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)}/${bi?.getIntExtra(BatteryManager.EXTRA_SCALE, -1)}",
             "computeChargeTimeRemaining=${runCatching { bm.computeChargeTimeRemaining() }.getOrElse { "error ${it.javaClass.simpleName}" }} ms",
-            prop("charging_policy", BatteryManager.BATTERY_PROPERTY_CHARGING_POLICY) + " (default=${BatteryManager.CHARGING_POLICY_DEFAULT})",
+            prop("charging_policy", CHARGING_POLICY_PROPERTY) + " (default=${CHARGING_POLICY_DEFAULT})",
             prop("current_now(uA)", BatteryManager.BATTERY_PROPERTY_CURRENT_NOW),
             prop("current_average(uA)", BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE),
             prop("charge_counter(uAh)", BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER),
