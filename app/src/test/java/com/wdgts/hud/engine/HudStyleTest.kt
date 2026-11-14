@@ -136,4 +136,29 @@ class HudStyleTest {
         val tight = packer.packed(listOf(w, a, b, c), 3, maxW).second
         assertTrue(!tight.containsAll(setOf("a", "b", "c")))              // the renderer sees weather would displace a block
     }
+
+    @Test fun smartspacerDatesAreRecognisedButCountdownsAreNot() {
+        assertTrue(HudRules.isDate("Sat, 14 Nov"))
+        assertTrue(HudRules.isDate("SAT, 14 NOV"))
+        assertTrue(HudRules.isDate("14 November"))
+        assertTrue(HudRules.isDate("Nov 14"))
+        assertTrue(HudRules.isDate("Saturday, 14 November 2026"))
+        assertTrue(!HudRules.isDate("20 min"))
+        assertTrue(!HudRules.isDate("in 20 mins"))
+        assertTrue(!HudRules.isDate("16:59"))
+        assertTrue(!HudRules.isDate("Sunset"))
+        assertTrue(!HudRules.isDate("Sat 5 pm"))
+    }
+    @Test fun fillScalesUpToTheWidgetButNotBeyondOneAndAHalf() {
+        val base = 1060f / 150f          // what a 1060 px wide widget gets before any filling
+        // a short widest line leaves the width free: height decides
+        val byHeight = HudSizing.fillUnit(1060, 580, base, 4, 100f)
+        assertTrue(byHeight > base && byHeight <= base * 1.5f)
+        // a wide line pins it
+        assertEquals(base, HudSizing.fillUnit(1060, 580, base, 4, 150f))
+        // never smaller than the base
+        assertEquals(base, HudSizing.fillUnit(1060, 200, base, 5, 140f))
+        // nothing to measure: base
+        assertEquals(base, HudSizing.fillUnit(1060, 580, base, 0, 0f))
+    }
 }
