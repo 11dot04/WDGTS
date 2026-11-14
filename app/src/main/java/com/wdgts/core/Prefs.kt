@@ -17,6 +17,9 @@ object Prefs {
     /** Widgets use the system sans instead of Google Sans Flex. The HUD (Geist Mono) and the music widgets keep their own fonts. */
     fun systemFont(c: Context) = sp(c).getBoolean("system_font", false)
     fun setSystemFont(c: Context, on: Boolean) = sp(c).edit().putBoolean("system_font", on).apply()
+    /** Sports widgets (team match, F1) take their colours from the system palette; off = fixed ink, paper and acid green. */
+    fun sportsMaterialYou(c: Context) = sp(c).getBoolean("sports_material_you", true)
+    fun setSportsMaterialYou(c: Context, on: Boolean) = sp(c).edit().putBoolean("sports_material_you", on).apply()
 
     // --- "spoiler" peek at tomorrow; auto-expires when the date changes ---
     fun spoilerOn(c: Context, today: Long) = sp(c).getLong("spoiler_day", -1L) == today
