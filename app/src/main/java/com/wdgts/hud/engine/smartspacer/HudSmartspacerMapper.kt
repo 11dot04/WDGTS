@@ -38,6 +38,9 @@ import java.util.Locale
  */
 @SuppressLint("RestrictedApi")
 class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
+    /** Names an event by its epoch time when it is the sun's ("SUNSET" / "SUNRISE"); set by HudSmartspacerSource, which knows the location. */
+    @Volatile var sunLabel: (Long) -> String? = { null }
+
 
     class WeatherLook(val glyphs: List<HudGlyph>, val word: String)
 
@@ -223,9 +226,10 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
 
     private fun collect(t: SmartspaceTarget, d: BaseTemplateData, hide: Boolean, out: MutableList<List<Token>>, card: String = "") {
         if (d is HeadToHeadTemplateData && headToHead(t, d, hide, out)) return
-        val title = d.primaryItem?.text?.text?.toString()?.trim().orEmpty()
+        // the HUD has its own date: a date target keeps its complications but not its date text
+        val title = d.primaryItem?.text?.text?.toString()?.trim().orEmpty().let { if (HudRules.isDate(it)) "" else it }
         val tap = tapOf(t, d.primaryItem?.tapAction)
-        val sub = d.subtitleItem?.text?.text?.toString()?.trim().orEmpty()
+        val sub = d.subtitleItem?.text?.text?.toString()?.trim().orEmpty().let { if (HudRules.isDate(it)) "" else it }
         val tid = t.smartspaceTargetId
         val comps = listOf("c1" to d.subtitleSupplementalItem, "c2" to d.supplementalLineItem, "c3" to d.supplementalAlarmItem)
             .mapNotNull { (slot, item) ->
@@ -286,8 +290,11 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         if (subIconSlot != null && !hide && !(namesTime && title.isNotBlank())) line += Icon(SsIconKey(tid, subIconSlot), tap)
         if (minutes != null) {
             val rest = rel?.second.orEmpty()
+            // no title and no icon to say what the time is for: name it when it is the sun's (SUNSET IN ✌🖐 ⌊20MIN)
+            val sun = if (title.isBlank() && subIconSlot == null && rest.isEmpty()) sunLabel(System.currentTimeMillis() + minutes * 60_000L) else null
             val lead = when {
                 rest.isNotEmpty() -> "${rest.uppercase(locale)} IN"
+                sun != null -> "$sun IN"
                 t.featureType == SmartspaceTarget.FEATURE_CALENDAR -> "STARTING IN"
                 else -> "IN"
             }

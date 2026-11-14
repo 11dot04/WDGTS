@@ -19,6 +19,8 @@ import com.kieronquinn.app.smartspacer.sdk.model.uitemplatedata.TapAction
 import com.wdgts.hud.engine.Block
 import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.WeatherInfo
+import com.wdgts.core.Prefs
+import com.wdgts.panchang.Astro
 import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +71,21 @@ object HudSmartspacerSource {
     @Synchronized
     fun start(ctx: Context, onChange: () -> Unit) {
         this.onChange = onChange
+        val appCtx = ctx.applicationContext
+        mapper.sunLabel = { ms ->
+            val zone = java.time.ZoneId.systemDefault()
+            val today = java.time.LocalDate.now(zone)
+            val lat = Prefs.lat(appCtx)
+            val lon = Prefs.lon(appCtx)
+            val sunrise = Astro.sunriseMs(today, zone, lat, lon)
+            val sunset = Astro.sunriseMs(today, zone, lat, lon, rising = false)
+            val tol = 10 * 60_000L
+            when {
+                Math.abs(ms - sunset) <= tol -> "SUNSET"
+                Math.abs(ms - sunrise) <= tol -> "SUNRISE"
+                else -> null
+            }
+        }
         if (helper != null) return
         val app = ctx.applicationContext
         if (!isInstalled(app)) {
