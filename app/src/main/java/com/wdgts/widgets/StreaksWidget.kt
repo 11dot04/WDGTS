@@ -124,7 +124,7 @@ class StreaksWidget : AppWidgetProvider() {
                         else extractGlyph(render(ic, 256))
                     }
                 }
-                mask?.let { cropToAlpha(it) }?.let { g -> if (GlyphMask.coverage(g) > 0.85f) innerGlyph(g)?.let { cropToAlpha(it) } ?: g else g }
+                mask?.let { cropToAlpha(it) }?.let { g -> if (GlyphMask.coverage(g) > 0.68f) innerGlyph(g)?.let { cropToAlpha(it) } ?: g else g }
             }.getOrNull()
         }
 
@@ -209,11 +209,11 @@ class StreaksWidget : AppWidgetProvider() {
             drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 11f * u, 11f * u,
                 Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = Color.argb(95, 0, 0, 0) })
 
-            val inset = 8.5f * u
+            val inset = 7.4f * u                          // KWGT: tiles start 42 px in on a 486 px card
             val gap = 2.8f * u
             val cw = (w - 2 * inset) / 4f
             val ch = (h - 2 * inset) / 4f
-            val countSize = (ch - gap) * 0.60f          // every count, in every tile, is this size
+            val countSize = (ch - gap) * 0.64f          // every count, in every tile, is this size
 
             for (def in STREAKS) {
                 val st = Streaks.state(ctx, def, today)
@@ -231,14 +231,14 @@ class StreaksWidget : AppWidgetProvider() {
                 val num = st.count.toString()
                 when {
                     cells >= 4 -> {      // big: icon top-left, light-weight count bottom-right
-                        icon(ctx, def, rect.left + 11f * u, rect.top + 11f * u, 15f * u, ink)
-                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, countSize, tf, wght = 270, wdthMax = 100)
+                        icon(ctx, def, rect.left + 11f * u, rect.top + 11.5f * u, 11.5f * u, ink)   // KWGT icons are 49-66 px on a 486 px card
+                        val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, countSize, tf, wght = 380, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.bottom - 3.4f * u, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                         if (rule.cap > 0) shield(rect.right - 5.6f * u, rect.top + 6.2f * u, 3.0f * u, st.shields, ink, mono)
                     }
                     cells == 2 -> {      // wide: icon left, count right
                         icon(ctx, def, rect.left + rect.height() * 0.52f, rect.centerY(), rect.height() * 0.64f, ink)
-                        val (sz, fv) = fitByAxis(num, rect.width() * 0.62f, countSize, tf, wght = 270, wdthMax = 100)
+                        val (sz, fv) = fitByAxis(num, rect.width() * 0.62f, countSize, tf, wght = 380, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.centerY() + sz * 0.35f, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
                     }
                     else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.62f, ink)

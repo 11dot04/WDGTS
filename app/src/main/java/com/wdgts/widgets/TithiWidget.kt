@@ -112,8 +112,8 @@ class TithiWidget : AppWidgetProvider() {
             val tithi = d.tithiName.uppercase()
 
             // the UPTO line defines the measure: width axis slides until it spans left..right exactly
-            val (size, fv) = fitByAxis(endLabel, right - left, 12.7f * u, tf, wght = 400, grow = true)
-            val lh = size * 1.06f
+            val (size, fv) = fitByAxis(endLabel, right - left, 11.9f * u, tf, wght = 400, grow = true)   // KWGT: cap height 41 px on a 486 px card
+            val lh = size * 1.16f                                                       // and a baseline pitch of ~67 px
             val divY = 0.80f * h
             val y4 = divY - 3.2f * u
             val y3 = y4 - lh
@@ -132,9 +132,9 @@ class TithiWidget : AppWidgetProvider() {
             // the moon phase sits between SP/KP and the number, centred in the gap
             val spEnd = tithiLeft + measureText(kp, size, tf, 0f, fv)
             val numStart = right - measureText(num, size, tf, 0f, fv)
-            val moonR = size * 0.36f
+            val moonR = size * 0.40f
             if (numStart - spEnd > moonR * 2f + 4f * u) {
-                MoonGlyph.draw(this, (spEnd + numStart) / 2f, y1 - size * 0.34f, moonR, d.elongation, p.onSurface, 0.45f * u)
+                MoonGlyph.draw(this, (spEnd + numStart) / 2f, y1 - size * 0.35f, moonR, d.elongation, p.onSurface, 0.5f * u, bump = 0.015f, darkAlpha = 46)
             }
             label(num, right, y1, size, p.accent, tf, Paint.Align.RIGHT, fvar = fv)
 
@@ -167,21 +167,21 @@ class TithiWidget : AppWidgetProvider() {
                 label("DRIK", left, b1, bs, ink, tf, fvar = bv)
                 val pw = label("PNCHNG", left, b2, bs, ink, tf, fvar = bv)
                 // the link arrow's right edge lines up with the right edge of PNCHNG
-                arrow(left + pw - 2.4f * u, b1 - bs * 0.40f, 2.4f * u, ink, 0.85f * u, diagonal = true)
+                arrow(left + pw + 0.4f * u - 2.06f * u, b1 - bs * 0.40f + 0.3f * u, 2.06f * u, ink, 0.66f * u, diagonal = true, arm = 3.1f * u)
                 nextPebbles(right, btnCy, 6.0f * u, ink, p.surface)
             } else {
                 label("SPLR", left, b1, bs, ink, tf, fvar = bv)
                 label("D+$off", left, b2, bs, ink, tf, fvar = bv)
-                val mx = 0.50f * w
+                val mx = 0.52f * w
                 label("MINUS", mx, b1, bs, ink, tf, fvar = bv)
                 val ow = label("ONE", mx, b2, bs, ink, tf, fvar = bv)
-                arrow(mx + ow + 4.2f * u, b2 - bs * 0.36f, 2.9f * u, ink, 0.65f * u, diagonal = false)
-                nextHalves(right, btnCy, 5.4f * u, ink, tf, bs * 0.74f)
+                arrow(mx + ow + 5.4f * u, b2 - bs * 0.36f, 2.8f * u, ink, 0.55f * u, diagonal = false)
+                nextHalves(right, btnCy, 5.76f * u, ink, tf, 5.0f * u)
             }
         }
 
         /** Arrow: diagonal "↗" (link) or left "←" (back). [cx],[cy] is its centre, [s] the half-size. */
-        private fun Canvas.arrow(cx: Float, cy: Float, s: Float, color: Int, stroke: Float, diagonal: Boolean) {
+        private fun Canvas.arrow(cx: Float, cy: Float, s: Float, color: Int, stroke: Float, diagonal: Boolean, arm: Float = s * 1.1f) {
             val pnt = Paint(Paint.ANTI_ALIAS_FLAG).also {
                 it.style = Paint.Style.STROKE; it.color = color; it.strokeWidth = stroke
                 it.strokeCap = Paint.Cap.BUTT; it.strokeJoin = Paint.Join.MITER; it.strokeMiter = 6f
@@ -189,7 +189,7 @@ class TithiWidget : AppWidgetProvider() {
             val path = Path()
             if (diagonal) {
                 path.moveTo(cx - s, cy + s); path.lineTo(cx + s, cy - s)
-                path.moveTo(cx - s * 0.1f, cy - s); path.lineTo(cx + s, cy - s); path.lineTo(cx + s, cy + s * 0.1f)
+                path.moveTo(cx + s - arm, cy - s); path.lineTo(cx + s, cy - s); path.lineTo(cx + s, cy - s + arm)
             } else {
                 path.moveTo(cx + s, cy); path.lineTo(cx - s, cy)
                 path.moveTo(cx - s * 0.1f, cy - s * 0.8f); path.lineTo(cx - s, cy); path.lineTo(cx - s * 0.1f, cy + s * 0.8f)
@@ -204,12 +204,12 @@ class TithiWidget : AppWidgetProvider() {
         private fun Canvas.nextPebbles(rightX: Float, cy: Float, r: Float, color: Int, hole: Int) {
             val f = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color }
             val discCx = rightX - r
-            val fat = RectF(rightX - 3.1f * r, cy - r, rightX - 1.7f * r, cy + r)
-            val thin = RectF(rightX - 4.3f * r, cy - r, rightX - 3.55f * r, cy + r)
+            val thin = RectF(rightX - 3.49f * r, cy - r, rightX - 3.07f * r, cy + r)     // measured: centre -3.28r, half-width 0.21r
+            val fat = RectF(rightX - 3.04f * r, cy - r, rightX - 2.00f * r, cy + r)      // centre -2.52r, half-width 0.52r
             drawOval(thin, f)
             drawOval(fat, f)
             drawCircle(discCx, cy, r, f)
-            // one thin arrow runs from the thin pebble through the fat one into the disc, open head
+            // one thin arrow runs from the thin pebble's centre through the fat one into the disc, open head
             val pnt = Paint(Paint.ANTI_ALIAS_FLAG).also {
                 it.style = Paint.Style.STROKE; it.color = hole; it.strokeWidth = 0.12f * r
                 it.strokeCap = Paint.Cap.BUTT; it.strokeJoin = Paint.Join.MITER; it.strokeMiter = 6f
@@ -224,20 +224,18 @@ class TithiWidget : AppWidgetProvider() {
 
         /** Spoiler "NEXT": two overlapping half-discs and the word set vertically along the right edge (reads downward). */
         private fun Canvas.nextHalves(rightX: Float, cy: Float, r: Float, color: Int, tf: android.graphics.Typeface, ts: Float) {
+            // two identical half-rings, bulging right; fitted to the KWGT card
             val ring = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color; it.style = Paint.Style.STROKE; it.strokeCap = Paint.Cap.BUTT }
-            val flat = rightX - ts * 1.55f                 // where the half-rings are cut flat
-            val outerW = r * 0.34f
-            ring.strokeWidth = outerW                      // front ring: thick
-            drawArc(RectF(flat - r + outerW / 2f, cy - r + outerW / 2f, flat + r - outerW / 2f, cy + r - outerW / 2f), -90f, 180f, false, ring)
-            val r2 = r * 0.78f                             // ring behind it: smaller, thinner, shifted left
-            val innerW = r * 0.22f
-            ring.strokeWidth = innerW
-            val c2 = flat - r * 0.78f
-            drawArc(RectF(c2 - r2 + innerW / 2f, cy - r2 + innerW / 2f, c2 + r2 - innerW / 2f, cy + r2 - innerW / 2f), -90f, 180f, false, ring)
-            val tx = rightX - ts * 0.5f
+            val w = r * 0.26f
+            ring.strokeWidth = w
+            val flat2 = rightX - 2f * r + r * 0.214f           // the front ring's rightmost point is 4.5u from the edge
+            val flat1 = flat2 - r * 0.9f
+            for (fl in floatArrayOf(flat1, flat2)) drawArc(RectF(fl - r + w / 2f, cy - r + w / 2f, fl + r - w / 2f, cy + r - w / 2f), -90f, 180f, false, ring)
+            val unit = r / 5.76f
+            val tx = rightX - 3.1f * unit                      // the word, reading upward, in the last 5.5u
             save()
-            rotate(90f, tx, cy)
-            label("NEXT", tx, cy + ts * 0.35f, ts, color, tf, Paint.Align.CENTER, 0.04f, Fonts.axes(wght = 480))
+            rotate(-90f, tx, cy)
+            label("NEXT", tx, cy + ts * 0.35f, ts, color, tf, Paint.Align.CENTER, 0.02f, Fonts.axes(wght = 480))
             restore()
         }
     }
