@@ -94,9 +94,9 @@ class F1Widget : ImageWidget(200) {
             tx = bx + box + pad * 1.6f; tw = w - tx - pad
             yHeader = 0.16f * h; yGp = 0.40f * h; yBig = 0.70f * h; yLine = 0.795f * h; ySess = 0.90f * h
         } else {
-            box = minOf(w - 2 * pad, 0.38f * h); bx = pad; by = 0.155f * h
+            box = minOf(w - 2 * pad, 0.35f * h); bx = pad; by = 0.15f * h
             tx = pad; tw = w - 2 * pad
-            yHeader = 0.075f * h; yGp = 0.69f * h; yBig = 0.865f * h; yLine = 0.912f * h; ySess = 0.96f * h
+            yHeader = 0.075f * h; yGp = 0.62f * h; yBig = 0.80f * h; yLine = 0.865f * h; ySess = 0.945f * h
         }
         val hair = 0.32f * u
 
@@ -145,10 +145,10 @@ class F1Widget : ImageWidget(200) {
         val gpName = wk.name.removeSuffix(" Grand Prix")
         val (gs, gv) = fitByAxis(gpName, tw, if (wide) 9.5f * u else 9f * u, tf, wght = 300, wdthMax = 100)
         label(gpName, tx, yGp, gs, b.ink, tf, fvar = gv)
-        label("GRAND PRIX", tx, yGp + 4.4f * u, micro, b.soft, mono, tracking = 0.14f, fvar = Fonts.monoW(450))
+        label("GRAND PRIX", tx, yGp + 5.6f * u, micro, b.soft, mono, tracking = 0.14f, fvar = Fonts.monoW(450))
 
         // hero: countdown as light numerals with mono units; while a session is on, its name instead
-        val heroSize = if (wide) 17f * u else 14.5f * u
+        val heroSize = if (wide) 17f * u else 13f * u
         when {
             cur == null -> heroText("Done", tx, yBig, tw, heroSize, tf, b.ink)
             live != null -> heroText(live.name, tx, yBig, tw, heroSize, tf, b.ink)
