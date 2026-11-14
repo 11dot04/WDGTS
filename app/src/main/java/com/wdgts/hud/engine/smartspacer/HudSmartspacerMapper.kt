@@ -280,9 +280,10 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
 
         val line = ArrayList<Token>()
         if (arrowAtStart) line += GlyphToken(HudGlyph.FOLLOWUP, tap)
-        // a line that names a time already carries the speak glyph, the pill, the hands and the bracket: no icon
+        // a line that names a time already carries the speak glyph, the pill, the hands and the bracket: no icon.
+        // Except when there is no title to say what it is about (Sunset 17:00): then the plugin's icon is the title.
         val namesTime = timeBound || (sub.isNotEmpty() && !hide && HudRules.mentionsTime(sub))
-        if (subIconSlot != null && !hide && !namesTime) line += Icon(SsIconKey(tid, subIconSlot), tap)
+        if (subIconSlot != null && !hide && !(namesTime && title.isNotBlank())) line += Icon(SsIconKey(tid, subIconSlot), tap)
         if (minutes != null) {
             val rest = rel?.second.orEmpty()
             val lead = when {
