@@ -105,15 +105,15 @@ fun chipWidth(text: String, size: Float, tf: Typeface, fv: String?, tracking: Fl
  */
 fun Canvas.chip(
     text: String, left: Float, cy: Float, size: Float, tf: Typeface, fv: String?,
-    fill: Int, textColor: Int, edge: Int, tracking: Float = 0.06f,
+    fill: Int, textColor: Int, edge: Int, tracking: Float = 0.06f, flat: Boolean = false,
 ): RectF {
     val padX = 0.9f * size
     val r = RectF(left, cy - 1.05f * size, left + chipWidth(text, size, tf, fv, tracking), cy + 1.05f * size)
     val rad = r.height() / 2f
     val d = 0.3f * size
-    drawRoundRect(RectF(r.left + d, r.top + d, r.right + d, r.bottom + d), rad, rad, solid(edge))
+    if (!flat) drawRoundRect(RectF(r.left + d, r.top + d, r.right + d, r.bottom + d), rad, rad, solid(edge))
     drawRoundRect(r, rad, rad, solid(fill))
-    drawRoundRect(r, rad, rad, Paint(Paint.ANTI_ALIAS_FLAG).also {
+    if (!flat) drawRoundRect(r, rad, rad, Paint(Paint.ANTI_ALIAS_FLAG).also {
         it.style = Paint.Style.STROKE; it.color = edge; it.strokeWidth = 0.2f * size
     })
     label(text, r.left + padX, cy + 0.36f * size, size, textColor, tf, Paint.Align.LEFT, tracking, fv)
@@ -133,4 +133,29 @@ fun Canvas.silhouette(bmp: Bitmap, left: Float, top: Float, size: Float, color: 
     val dw = bmp.width * s
     val dh = bmp.height * s
     drawBitmap(bmp, null, RectF(left + (size - dw) / 2, top + (size - dh) / 2, left + (size + dw) / 2, top + (size + dh) / 2), paint)
+}
+
+/**
+ * A wedge of diagonal stripes, the poster way: stripes lean right, the wedge's left edge leans with them and
+ * the right side is meant to bleed off the card. [pitch] is stripe plus gap; the stripe is half of it.
+ */
+fun Canvas.stripeWedge(x0: Float, y0: Float, x1: Float, y1: Float, color: Int, pitch: Float, lean: Float = 0.62f) {
+    val h = y1 - y0
+    val shift = h * lean
+    val wedge = android.graphics.Path().apply {
+        moveTo(x0 + shift, y0); lineTo(x1, y0); lineTo(x1, y1); lineTo(x0, y1); close()
+    }
+    save()
+    clipPath(wedge)
+    val paint = solid(color)
+    val thick = pitch / 2f
+    var x = x0 - shift
+    while (x < x1) {
+        val s = android.graphics.Path().apply {
+            moveTo(x, y1); lineTo(x + thick, y1); lineTo(x + thick + shift, y0); lineTo(x + shift, y0); close()
+        }
+        drawPath(s, paint)
+        x += pitch
+    }
+    restore()
 }
