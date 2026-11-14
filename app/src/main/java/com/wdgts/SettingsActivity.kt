@@ -18,6 +18,8 @@ import android.widget.TextView
 import android.widget.Toast
 import com.wdgts.core.Fonts
 import com.wdgts.core.Prefs
+import com.wdgts.f1.F1Widget
+import com.wdgts.sports.TeamWidget
 import com.wdgts.hud.HudPrefs
 import com.wdgts.hud.HudSources
 import com.wdgts.hud.HudWidget
@@ -86,6 +88,15 @@ class SettingsActivity : Activity() {
         header("Team match (ESPN)")
         val team = field("ESPN team id (359 = Arsenal)", Prefs.teamId(this))
         val tag = field("Home tag (e.g. N5)", Prefs.homeTag(this))
+        col.addView(Switch(this).apply {
+            text = "Sports widgets (team match, F1): Material You colours (off = fixed ink, paper and acid green)"
+            isChecked = Prefs.sportsMaterialYou(this@SettingsActivity)
+            setOnCheckedChangeListener { _, on ->
+                Prefs.setSportsMaterialYou(this@SettingsActivity, on)
+                TeamWidget().refreshAll(applicationContext)
+                F1Widget().refreshAll(applicationContext)
+            }
+        })
 
         header("Streak rules")
         note("Per tile: count, shields held, shields earned per completed day, max shields, free missed days, and whether missed days reset it. With auto-reset off the count simply waits for you.")
