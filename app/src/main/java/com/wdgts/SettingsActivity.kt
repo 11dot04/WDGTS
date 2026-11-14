@@ -204,6 +204,11 @@ class SettingsActivity : Activity() {
             listOf("Arrow (opens the player)", "Pause pill", "Cassette pill (pause)"),
             HudPrefs.musicControl(this),
         ) { HudPrefs.setMusicControl(this, it) }
+        col.addView(Switch(this).apply {
+            text = "HUD: Material You accent on the date numeral, weather bubble and action pills"
+            isChecked = HudPrefs.materialYou(this@SettingsActivity)
+            setOnCheckedChangeListener { _, on -> HudPrefs.setMaterialYou(this@SettingsActivity, on); HudWidget().refreshAll(this@SettingsActivity) }
+        })
         col.addView(Button(this).apply {
             text = "Apps that get a notification chip"
             setOnClickListener {
