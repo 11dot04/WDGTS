@@ -23,30 +23,6 @@ object Fonts {
     fun mono(c: Context): Typeface = monoCache
         ?: (runCatching { Typeface.createFromAsset(c.assets, "fonts/mono.ttf") }.getOrNull() ?: MONO).also { monoCache = it }
 
-    private var geistCache: Typeface? = null
-
-    /** Geist Mono as the HUD finds it (any file in assets/fonts with "geist" and "mono" in its name), else [mono]. */
-    fun geist(c: Context): Typeface = geistCache ?: run {
-        val files = runCatching { c.assets.list("fonts") }.getOrNull().orEmpty()
-        val f = files.firstOrNull { it.contains("geist", ignoreCase = true) && it.contains("mono", ignoreCase = true) }
-        (f?.let { runCatching { Typeface.createFromAsset(c.assets, "fonts/$it") }.getOrNull() } ?: mono(c)).also { geistCache = it }
-    }
-
-    /** 'wght' setting for a variable Geist Mono (ignored by a static file). */
-    fun monoW(w: Int) = "'wght' $w"
-
-    private var robotoCache: Typeface? = null
-    private var robotoTried = false
-
-    /** Roboto Flex (assets/fonts/roboto_flex.ttf, fetched by CI), or null when the file is missing. */
-    fun robotoFlex(c: Context): Typeface? {
-        if (!robotoTried) {
-            robotoTried = true
-            robotoCache = runCatching { Typeface.createFromAsset(c.assets, "fonts/roboto_flex.ttf") }.getOrNull()
-        }
-        return robotoCache
-    }
-
     /** Google Sans Flex axes: wght 100-900, wdth 75-125, opsz 8-144, GRAD -200-150, ROND 0-100, slnt -10-0. */
     fun axes(wght: Int = 450, wdth: Int = 100, rond: Int = 0, opsz: Int = 14, grad: Int = 0) =
         "'wght' $wght, 'wdth' $wdth, 'ROND' $rond, 'opsz' $opsz, 'GRAD' $grad"

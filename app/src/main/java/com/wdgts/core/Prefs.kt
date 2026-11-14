@@ -14,12 +14,12 @@ object Prefs {
     /** Shukla Paksha counted 16..30 (19 instead of 04), as the KWGT card did. */
     fun shukla16(c: Context) = sp(c).getBoolean("shukla16", true)
     fun setShukla16(c: Context, on: Boolean) = sp(c).edit().putBoolean("shukla16", on).apply()
+    /** Streaks: the small tiles take Material shapes (cookie, clover, flower, cushion) instead of rounded squares. */
+    fun streakShapes(c: Context) = sp(c).getBoolean("streak_shapes", false)
+    fun setStreakShapes(c: Context, on: Boolean) = sp(c).edit().putBoolean("streak_shapes", on).apply()
     /** Widgets use the system sans instead of Google Sans Flex. The HUD (Geist Mono) and the music widgets keep their own fonts. */
     fun systemFont(c: Context) = sp(c).getBoolean("system_font", false)
     fun setSystemFont(c: Context, on: Boolean) = sp(c).edit().putBoolean("system_font", on).apply()
-    /** Sports widgets (team match, F1) take their colours from the system palette; off = fixed ink, paper and acid green. */
-    fun sportsMaterialYou(c: Context) = sp(c).getBoolean("sports_material_you", true)
-    fun setSportsMaterialYou(c: Context, on: Boolean) = sp(c).edit().putBoolean("sports_material_you", on).apply()
 
     // --- "spoiler" peek at tomorrow; auto-expires when the date changes ---
     fun spoilerOn(c: Context, today: Long) = sp(c).getLong("spoiler_day", -1L) == today
@@ -75,9 +75,6 @@ object Prefs {
     fun setTeamId(c: Context, id: String) = sp(c).edit().putString("team_id", id).apply()
     fun matchJson(c: Context): String? = sp(c).getString("match_json", null)
     fun setMatchJson(c: Context, j: String?) = sp(c).edit().putString("match_json", j).apply()
-    /** What the last ESPN fetch saw, per request, for the settings screen. */
-    fun espnDebug(c: Context): String = sp(c).getString("espn_debug", "no fetch yet")!!
-    fun setEspnDebug(c: Context, s: String) = sp(c).edit().putString("espn_debug", s).apply()
     fun liveLeague(c: Context): String? = sp(c).getString("live_league", null)
     fun setLiveLeague(c: Context, l: String?) = sp(c).edit().putString("live_league", l).apply()
 
