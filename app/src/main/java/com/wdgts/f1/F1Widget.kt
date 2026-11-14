@@ -132,11 +132,17 @@ class F1Widget : ImageWidget(200) {
                     label(it, cx, y, small * 0.9f, b.ink, mono, tracking = 0.02f, fvar = Fonts.monoW(500))
                     y += 5f * u
                 }
-                y += 3f * u
-                val coords = coordinates(wk.lat, wk.lon)
-                coords.forEach {
-                    label(it, cx, y, micro * 0.95f, b.soft, mono, tracking = 0.04f, fvar = Fonts.monoW(450))
-                    y += 4.6f * u
+                if (live != null) {
+                    // a session is on: stripes take the coordinates' place, bleeding off the right edge
+                    val top = y - 0.5f * u
+                    val bottom = by + box
+                    if (bottom - top > 6f * u) stripeWedge(cx, top, w + 2f * u, bottom, b.block, 3.6f * u)
+                } else {
+                    y += 3f * u
+                    coordinates(wk.lat, wk.lon).forEach {
+                        label(it, cx, y, micro * 0.95f, b.soft, mono, tracking = 0.04f, fvar = Fonts.monoW(450))
+                        y += 4.6f * u
+                    }
                 }
             }
         }
