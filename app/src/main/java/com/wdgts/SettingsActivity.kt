@@ -88,6 +88,7 @@ class SettingsActivity : Activity() {
         header("Team match (ESPN)")
         val team = field("ESPN team id (359 = Arsenal)", Prefs.teamId(this))
         val tag = field("Home tag (e.g. N5)", Prefs.homeTag(this))
+        note("Last ESPN fetch:\n" + Prefs.espnDebug(this))
         col.addView(Switch(this).apply {
             text = "Sports widgets (team match, F1): Material You colours (off = fixed ink, paper and acid green)"
             isChecked = Prefs.sportsMaterialYou(this@SettingsActivity)
