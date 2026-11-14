@@ -106,13 +106,15 @@ class TithiWidget : AppWidgetProvider() {
             val kp = if (d.paksha == Paksha.KRISHNA) "KP" else "SP"
             val num = String.format(Locale.US, "%02d,", d.numberFor(Prefs.shukla16(ctx)))
             val endZ = Instant.ofEpochMilli(d.tithiEndMs).atZone(zone)
-            val endLabel = "UPTO " + timeFmt.format(endZ).uppercase() +
-                if (endZ.toLocalDate().isAfter(d.date)) " +1" else ""
+            val endLabel = "UPTO " + timeFmt.format(endZ).uppercase()
+            val nextDay = endZ.toLocalDate().isAfter(d.date)
             val month = d.month.uppercase()
             val tithi = d.tithiName.uppercase()
 
             // the UPTO line defines the measure: width axis slides until it spans left..right exactly
-            val (size, fv) = fitByAxis(endLabel, right - left, 11.9f * u, tf, wght = 400, grow = true)   // KWGT: cap height 41 px on a 486 px card
+            // a "+1" (ends tomorrow) is a small superscript after the line, so the line itself is not condensed to make room for it
+            val supRoom = if (nextDay) measureText("+1", 0.42f * 11.9f * u, tf, 0f) + 1.0f * u else 0f
+            val (size, fv) = fitByAxis(endLabel, right - left - supRoom, 11.9f * u, tf, wght = 400, grow = true)   // KWGT: cap height 41 px on a 486 px card
             val lh = size * 1.16f                                                       // and a baseline pitch of ~67 px
             val divY = 0.80f * h
             val y4 = divY - 3.2f * u
@@ -125,6 +127,10 @@ class TithiWidget : AppWidgetProvider() {
                 fitByAxis(month, right - left, size, tf, wght = 400, wdthMax = 100) else size to fv
 
             label(endLabel, left, y4, size, p.faint, tf, fvar = fv)
+            if (nextDay) {
+                val ss = size * 0.42f
+                label("+1", right - measureText("+1", ss, tf, 0f), y4 - size * 0.52f, ss, p.faint, tf)
+            }
             label(tithi, right, y3, size, p.muted, tf, Paint.Align.RIGHT, fvar = fv)
             label(month, left, y2, ms, p.accent, tf, fvar = mv)
             val tithiLeft = right - measureText(tithi, size, tf, 0f, fv)
@@ -132,9 +138,9 @@ class TithiWidget : AppWidgetProvider() {
             // the moon phase sits between SP/KP and the number, centred in the gap
             val spEnd = tithiLeft + measureText(kp, size, tf, 0f, fv)
             val numStart = right - measureText(num, size, tf, 0f, fv)
-            val moonR = size * 0.40f
+            val moonR = size * 0.42f
             if (numStart - spEnd > moonR * 2f + 4f * u) {
-                MoonGlyph.draw(this, (spEnd + numStart) / 2f, y1 - size * 0.35f, moonR, d.elongation, p.onSurface, 0.5f * u, bump = 0.015f, darkAlpha = 46)
+                MoonGlyph.draw(this, (spEnd + numStart) / 2f, y1 - size * 0.35f, moonR, d.elongation, p.onSurface)
             }
             label(num, right, y1, size, p.accent, tf, Paint.Align.RIGHT, fvar = fv)
 
@@ -167,7 +173,7 @@ class TithiWidget : AppWidgetProvider() {
                 label("DRIK", left, b1, bs, ink, tf, fvar = bv)
                 val pw = label("PNCHNG", left, b2, bs, ink, tf, fvar = bv)
                 // the link arrow's right edge lines up with the right edge of PNCHNG
-                arrow(left + pw + 0.4f * u - 2.06f * u, b1 - bs * 0.40f + 0.3f * u, 2.06f * u, ink, 0.66f * u, diagonal = true, arm = 3.1f * u)
+                arrow(left + pw + 0.1f * u - 1.78f * u, b1 - bs * 0.40f, 1.78f * u, ink, 0.77f * u, diagonal = true)
                 nextPebbles(right, btnCy, 6.0f * u, ink, p.surface)
             } else {
                 label("SPLR", left, b1, bs, ink, tf, fvar = bv)
@@ -175,26 +181,28 @@ class TithiWidget : AppWidgetProvider() {
                 val mx = 0.52f * w
                 label("MINUS", mx, b1, bs, ink, tf, fvar = bv)
                 val ow = label("ONE", mx, b2, bs, ink, tf, fvar = bv)
-                arrow(mx + ow + 5.4f * u, b2 - bs * 0.36f, 2.8f * u, ink, 0.55f * u, diagonal = false)
+                arrow(mx + ow + 5.4f * u, b2 - bs * 0.36f, 1.78f * u, ink, 0.77f * u, diagonal = false)
                 nextHalves(right, btnCy, 5.76f * u, ink, tf, 5.0f * u)
             }
         }
 
         /** Arrow: diagonal "↗" (link) or left "←" (back). [cx],[cy] is its centre, [s] the half-size. */
-        private fun Canvas.arrow(cx: Float, cy: Float, s: Float, color: Int, stroke: Float, diagonal: Boolean, arm: Float = s * 1.1f) {
+        /**
+         * The card's arrow, measured on the KWGT version: a square box, the shaft running corner to corner and a head of two
+         * arms as long as the box side (so the stem is short, as long as an arm). [diagonal] false = the same arrow turned to point left.
+         */
+        private fun Canvas.arrow(cx: Float, cy: Float, s: Float, color: Int, stroke: Float, diagonal: Boolean) {
             val pnt = Paint(Paint.ANTI_ALIAS_FLAG).also {
                 it.style = Paint.Style.STROKE; it.color = color; it.strokeWidth = stroke
                 it.strokeCap = Paint.Cap.BUTT; it.strokeJoin = Paint.Join.MITER; it.strokeMiter = 6f
             }
             val path = Path()
-            if (diagonal) {
-                path.moveTo(cx - s, cy + s); path.lineTo(cx + s, cy - s)
-                path.moveTo(cx + s - arm, cy - s); path.lineTo(cx + s, cy - s); path.lineTo(cx + s, cy - s + arm)
-            } else {
-                path.moveTo(cx + s, cy); path.lineTo(cx - s, cy)
-                path.moveTo(cx - s * 0.1f, cy - s * 0.8f); path.lineTo(cx - s, cy); path.lineTo(cx - s * 0.1f, cy + s * 0.8f)
-            }
+            path.moveTo(cx - s, cy + s); path.lineTo(cx + s, cy - s)
+            path.moveTo(cx - s, cy - s); path.lineTo(cx + s, cy - s); path.lineTo(cx + s, cy + s)
+            save()
+            if (!diagonal) rotate(-135f, cx, cy)
             drawPath(path, pnt)
+            restore()
         }
 
         /**

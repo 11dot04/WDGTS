@@ -25,6 +25,8 @@ import com.wdgts.R
 import com.wdgts.core.*
 import java.time.LocalDate
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -120,50 +122,49 @@ class StreaksWidget : AppWidgetProvider() {
                     val pkg = AppResolver.resolve(ctx, def)
                     if (pkg.isNotEmpty()) {
                         val ic = ctx.packageManager.getApplicationIcon(pkg)
-                        mask = if (ic is AdaptiveIconDrawable) (ic.monochrome ?: ic.foreground)?.let { render(it, 432) }
-                        else extractGlyph(render(ic, 256))
+                        mask = if (ic is AdaptiveIconDrawable) adaptiveGlyph(ic) else extractGlyph(render(ic, 256))
                     }
                 }
-                mask?.let { cropToAlpha(it) }?.let { g -> if (GlyphMask.coverage(g) > 0.68f) innerGlyph(g)?.let { cropToAlpha(it) } ?: g else g }
+                mask?.let { cropToAlpha(it) }
             }.getOrNull()
         }
 
         /**
-         * An icon whose artwork is one solid shape (Lumosity's badge) would draw as a blacked-out blob. The drawing
-         * inside it is what we want: keep whatever differs from the shape's own dominant colour, as alpha.
+         * An adaptive icon as a glyph. The themed (monochrome) layer when the app has one. Otherwise the background and
+         * foreground layers drawn full-bleed on top of each other, keeping whatever differs from the background colour, like an
+         * auto-themed icon: a white owl on green leaves the green owl, a white head on a dark badge leaves the head. (The
+         * foreground's own alpha would give a solid blob for icons whose foreground is a filled shape.)
          */
-        private fun innerGlyph(src: Bitmap): Bitmap? {
-            val w = src.width; val h = src.height
-            val px = IntArray(w * h)
-            src.getPixels(px, 0, w, 0, 0, w, h)
-            val counts = HashMap<Int, Int>()
-            for (c in px) if (Color.alpha(c) > 200) counts.merge(((Color.red(c) shr 3) shl 10) or ((Color.green(c) shr 3) shl 5) or (Color.blue(c) shr 3), 1, Int::plus)
-            val top = counts.maxByOrNull { it.value }?.key ?: return null
-            val br = ((top shr 10) and 31) shl 3; val bg = ((top shr 5) and 31) shl 3; val bb = (top and 31) shl 3
-            for (i in px.indices) {
-                val c = px[i]
-                val dist = sqrt(((Color.red(c) - br).let { it * it } + (Color.green(c) - bg).let { it * it } + (Color.blue(c) - bb).let { it * it }).toFloat())
-                val a = ((dist - 28f) / 90f).coerceIn(0f, 1f) * (Color.alpha(c) / 255f)
-                px[i] = (((a * 255).toInt()) shl 24) or 0x00FFFFFF
-            }
-            val out = Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
-            return out.takeIf { GlyphMask.coverage(it) in 0.04f..0.75f }
+        private fun adaptiveGlyph(ic: AdaptiveIconDrawable): Bitmap? {
+            ic.monochrome?.let { return render(it, 432) }
+            val n = 432
+            val comp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+            val cv = Canvas(comp)
+            ic.background?.let { it.setBounds(0, 0, n, n); it.draw(cv) }
+            ic.foreground?.let { it.setBounds(0, 0, n, n); it.draw(cv) }
+            // a transparent background has no colour to subtract: use the foreground's shape
+            return if (Color.alpha(comp.getPixel(2, 2)) > 200) extractGlyph(comp) else ic.foreground?.let { render(it, n) }
         }
 
-        /** Material "public" globe (Apache 2.0): filled disc ring with continents, drawn in a 24-unit box. */
-        private val GLOBE: Path by lazy {
+
+        /** Material "public" globe (Apache 2.0), the two continent shapes only (the holes of the filled icon), in a 24-unit box. */
+        private val CONTINENTS: Path by lazy {
             PathParser.createPathFromPathData(
-                "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z",
+                "M11 19.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93z" +
+                    "M17.9 17.39c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z",
             )
         }
 
+        /** A line globe: a ring with the continents solid, like the KWGT card (not a filled disc with the continents cut out). */
         private fun Canvas.globe(cx: Float, cy: Float, r: Float, color: Int) {
             val k = (r * 2f) / 20f            // the artwork spans 2..22 of the 24-unit box
             val fill = Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.FILL; it.color = color }
+            val ring = Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.STROKE; it.color = color; it.strokeWidth = 1.5f * k }
             save()
             translate(cx - 12f * k, cy - 12f * k)
             scale(k, k)
-            drawPath(GLOBE, fill)
+            drawCircle(12f, 12f, 9.25f, ring.also { it.strokeWidth = 1.5f })
+            drawPath(CONTINENTS, fill)
             restore()
         }
 
@@ -199,6 +200,25 @@ class StreaksWidget : AppWidgetProvider() {
             restoreToCount(layer)
         }
 
+        /** Material-style shapes for the 1x1 tiles (they carry no text): a polar curve r = R (1 + a cos(k t)) fitted inside the tile. */
+        private enum class Kind(val lobes: Int, val amp: Float) { COOKIE9(9, 0.045f), CLOVER4(4, 0.13f), FLOWER8(8, 0.09f), CUSHION(4, -0.10f), COOKIE12(12, 0.03f) }
+        private val SHAPES = arrayOf(Kind.COOKIE9, Kind.CLOVER4, Kind.CUSHION, Kind.FLOWER8, Kind.COOKIE12)
+
+        private fun tileShape(r: RectF, k: Kind): Path {
+            val cx = r.centerX(); val cy = r.centerY()
+            val rad = minOf(r.width(), r.height()) / 2f / (1f + abs(k.amp)) * 1.0f
+            val p = Path()
+            val n = 160
+            for (i in 0..n) {
+                val t = (2.0 * Math.PI * i / n).toFloat()
+                val rr = rad * (1f + k.amp * cos(k.lobes * t))
+                val x = cx + rr * cos(t); val y = cy + rr * sin(t)
+                if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
+            }
+            p.close()
+            return p
+        }
+
         private fun Canvas.drawStreaks(ctx: Context, w: Int, h: Int, today: Long) {
             val p = Palette.of(ctx)
             val tf = Fonts.display(ctx)
@@ -213,6 +233,7 @@ class StreaksWidget : AppWidgetProvider() {
             val gap = 2.8f * u
             val cw = (w - 2 * inset) / 4f
             val ch = (h - 2 * inset) / 4f
+            val shapes = Prefs.streakShapes(ctx)
             val countSize = (ch - gap) * 0.64f          // every count, in every tile, is this size
 
             for (def in STREAKS) {
@@ -225,7 +246,9 @@ class StreaksWidget : AppWidgetProvider() {
                 val fill = if (st.doneToday) p.surface else p.tertiary
                 val ink = if (st.doneToday) p.accent else p.surface
                 val rad = minOf(rect.width(), rect.height()) * 0.22f
-                drawRoundRect(rect, rad, rad, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = fill })
+                val tilePaint = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = fill }
+                val shapeKind = if (shapes && def.w == 1 && def.h == 1) SHAPES[STREAKS.indexOf(def) % SHAPES.size] else null
+                if (shapeKind != null) drawPath(tileShape(rect, shapeKind), tilePaint) else drawRoundRect(rect, rad, rad, tilePaint)
 
                 val cells = def.w * def.h
                 val num = st.count.toString()
