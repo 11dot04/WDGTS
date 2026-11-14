@@ -65,9 +65,10 @@ class HudWidget : ImageWidget() {
         val g = HudGeometry.of(ctx)
         val slots = g.size.bodyLines
         val content = HudComposer.compose(ctx, slots)
-        val laid = renderer(ctx).lay(g.widthPx, g.heightPx, content)
+        val laid = renderer(ctx).lay(g.widthPx, g.heightPx, content, HudPrefs.fill(ctx))
         val pad = Hud.PAD_H * laid.unit
-        rv.setViewLayoutMargin(R.id.zone_l1, RemoteViews.MARGIN_TOP, g.topPx, TypedValue.COMPLEX_UNIT_PX)
+        val pitchPx = Hud.LINE_PITCH * laid.unit
+        rv.setViewLayoutMargin(R.id.zone_l1, RemoteViews.MARGIN_TOP, Hud.PAD_V * laid.unit, TypedValue.COMPLEX_UNIT_PX)
         for (i in 0 until Hud.MAX_LINES) {
             val lineId = id(ctx, "zone_l${i + 1}")
             if (i >= g.size.lines) {
@@ -75,7 +76,7 @@ class HudWidget : ImageWidget() {
                 continue
             }
             rv.setViewVisibility(lineId, View.VISIBLE)
-            rv.setViewLayoutHeight(lineId, g.pitchPx, TypedValue.COMPLEX_UNIT_PX)
+            rv.setViewLayoutHeight(lineId, pitchPx, TypedValue.COMPLEX_UNIT_PX)
             val line = laid.lines.getOrNull(i) ?: emptyList()
             val spans = HudHits.spans(line, laid.unit, pad, g.widthPx.toFloat())
             for (j in 0 until SPANS) {
@@ -101,7 +102,7 @@ class HudWidget : ImageWidget() {
         if (CARD) drawColor(p.surface)
         val ink = if (CARD) p.onSurface else Color.WHITE
         val content = HudComposer.compose(ctx, HudSizing.of(w, h).bodyLines)
-        renderer(ctx).draw(this, w, h, content, HudColors(ink, if (HudPrefs.materialYou(ctx)) ctx.getColor(android.R.color.system_accent1_200) else null), iconPainter(ctx))
+        renderer(ctx).draw(this, w, h, content, HudColors(ink, if (HudPrefs.materialYou(ctx)) ctx.getColor(android.R.color.system_accent1_200) else null, HudPrefs.fill(ctx)), iconPainter(ctx))
     }
 
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)

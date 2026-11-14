@@ -50,4 +50,8 @@ object HudPrefs {
     /** Material You: the date numeral, the weather bubble and the action pills take the system accent colour. */
     fun materialYou(c: Context) = sp(c).getBoolean("material_you", false)
     fun setMaterialYou(c: Context, on: Boolean) = sp(c).edit().putBoolean("material_you", on).apply()
+
+    /** Scale the HUD's text up so it fills the widget's width / height (up to 1.5 x the base size). */
+    fun fill(c: Context) = sp(c).getBoolean("hud_fill", true)
+    fun setFill(c: Context, on: Boolean) = sp(c).edit().putBoolean("hud_fill", on).apply()
 }

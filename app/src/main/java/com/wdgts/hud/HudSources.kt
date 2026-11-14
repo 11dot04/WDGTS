@@ -262,22 +262,62 @@ object HudSources {
     }
 
     /**
-     * [USB-C] FULL IN ⌊40MIN while charging and the system knows how long it will take; without an estimate (slow, wireless
-     * and just-plugged-in charging often have none) [USB-C] CHARGING (42%), so it is never missing while plugged in.
+     * [USB-C] FULL IN ⌊40MIN, or TO 80% IN when the charging policy holds the battery at 80 %. The system's estimate
+     * (computeChargeTimeRemaining) is used when it has one and the target is 100 %; otherwise the time is worked out from the
+     * charge counter and the current. Without any estimate: [USB-C] CHARGING (42%), so a plugged-in phone always shows it.
      */
     fun charging(c: Context): Block? {
         val bi = c.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null
         if (bi.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) == 0) return null
-        val ms = c.getSystemService(BatteryManager::class.java).computeChargeTimeRemaining()
-        if (ms > 0) {
+        val bm = c.getSystemService(BatteryManager::class.java)
+        val level = bi.getIntExtra(BatteryManager.EXTRA_LEVEL, -1).let { l -> if (l < 0) -1 else l * 100 / bi.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) }
+        val limited = chargeLimited(bm) && level in 0..79
+        val ms = if (!limited) bm.computeChargeTimeRemaining().takeIf { it > 0 } ?: estimateChargeMs(bm, 100)
+                 else estimateChargeMs(bm, 80)
+        if (ms in 1..(24L * 3_600_000L)) {
             val minutes = (ms / 60_000L).coerceAtLeast(1)
             val remaining = if (minutes >= 60) "${minutes / 60}H ${"%02d".format(minutes % 60)}M" else "${minutes}MIN"
-            return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("FULL IN"), Timer(remaining))))
+            return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text(if (limited) "TO 80% IN" else "FULL IN"), Timer(remaining))))
         }
-        val level = bi.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-        val scale = bi.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
-        val pct = if (level >= 0) level * 100 / scale else return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"))))
-        return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"), OutlinePill("$pct%"))))
+        if (level < 0) return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"))))
+        val word = if (chargeLimited(bm) && level >= 80) "HELD AT 80%" else "CHARGING"
+        return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text(word), OutlinePill("$level%"))))
+    }
+
+    /** True when the system's charging policy is something other than the default (adaptive / long-life: it stops at about 80 %). */
+    private fun chargeLimited(bm: BatteryManager): Boolean {
+        val p = runCatching { bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGING_POLICY) }.getOrDefault(0)
+        return p != 0 && p != Int.MIN_VALUE && p != BatteryManager.CHARGING_POLICY_DEFAULT
+    }
+
+    /** Milliseconds until [target] percent from the charge counter (µAh) and the current (µA); -1 when the device reports neither. */
+    private fun estimateChargeMs(bm: BatteryManager, target: Int): Long {
+        fun prop(id: Int) = runCatching { bm.getIntProperty(id) }.getOrDefault(Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
+        val cur = prop(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)?.let { Math.abs(it.toLong()) } ?: return -1
+        val counter = prop(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)?.toLong() ?: return -1
+        val pct = prop(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: return -1
+        if (cur <= 0 || counter <= 0 || pct <= 0) return -1
+        val microAmps = if (cur < 20_000) cur * 1000 else cur           // some devices report mA
+        val remaining = counter * 100 / pct * target / 100 - counter     // µAh still to go
+        if (remaining <= 0) return -1
+        return remaining * 3_600_000L / microAmps
+    }
+
+    /** What the battery reports, for working out why a charging time does not show. */
+    fun chargingDump(c: Context): String {
+        val bi = c.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val bm = c.getSystemService(BatteryManager::class.java)
+        fun prop(name: String, id: Int) = "$name=" + runCatching { bm.getIntProperty(id) }.getOrElse { "error ${it.javaClass.simpleName}" }
+        return listOf(
+            "plugged=${bi?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)} status=${bi?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)} level=${bi?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)}/${bi?.getIntExtra(BatteryManager.EXTRA_SCALE, -1)}",
+            "computeChargeTimeRemaining=${runCatching { bm.computeChargeTimeRemaining() }.getOrElse { "error ${it.javaClass.simpleName}" }} ms",
+            prop("charging_policy", BatteryManager.BATTERY_PROPERTY_CHARGING_POLICY) + " (default=${BatteryManager.CHARGING_POLICY_DEFAULT})",
+            prop("current_now(uA)", BatteryManager.BATTERY_PROPERTY_CURRENT_NOW),
+            prop("current_average(uA)", BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE),
+            prop("charge_counter(uAh)", BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER),
+            prop("capacity(%)", BatteryManager.BATTERY_PROPERTY_CAPACITY),
+            "own estimate to 100%=${estimateChargeMs(bm, 100)} ms, to 80%=${estimateChargeMs(bm, 80)} ms",
+        ).joinToString("\n")
     }
 
     /** Open-Meteo weather from Weather.kt, used when Smartspacer has none. */
