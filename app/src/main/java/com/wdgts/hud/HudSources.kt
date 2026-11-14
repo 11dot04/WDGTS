@@ -261,15 +261,23 @@ object HudSources {
         return t.equals(MusicState.title.trim(), ignoreCase = true) || t.equals(HudText.cleanTitle(MusicState.title), ignoreCase = true)
     }
 
-    /** [USB-C] FULL IN ⌊40MIN, only while charging and the system knows how long it will take. */
+    /**
+     * [USB-C] FULL IN ⌊40MIN while charging and the system knows how long it will take; without an estimate (slow, wireless
+     * and just-plugged-in charging often have none) [USB-C] CHARGING (42%), so it is never missing while plugged in.
+     */
     fun charging(c: Context): Block? {
         val bi = c.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null
         if (bi.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) == 0) return null
         val ms = c.getSystemService(BatteryManager::class.java).computeChargeTimeRemaining()
-        if (ms <= 0) return null
-        val minutes = (ms / 60_000L).coerceAtLeast(1)
-        val remaining = if (minutes >= 60) "${minutes / 60}H ${"%02d".format(minutes % 60)}M" else "${minutes}MIN"
-        return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("FULL IN"), Timer(remaining))))
+        if (ms > 0) {
+            val minutes = (ms / 60_000L).coerceAtLeast(1)
+            val remaining = if (minutes >= 60) "${minutes / 60}H ${"%02d".format(minutes % 60)}M" else "${minutes}MIN"
+            return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("FULL IN"), Timer(remaining))))
+        }
+        val level = bi.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = bi.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+        val pct = if (level >= 0) level * 100 / scale else return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"))))
+        return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"), OutlinePill("$pct%"))))
     }
 
     /** Open-Meteo weather from Weather.kt, used when Smartspacer has none. */

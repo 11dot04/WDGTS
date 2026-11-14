@@ -74,23 +74,16 @@ object HudComposer {
             }
         }
 
-        // weather: its own line directly under the date when there is room, otherwise a temperature chip
+        // weather: the renderer gives it its own line under the date when that displaces nothing, else a temperature chip on line 1
         val weather: WeatherInfo? = HudSmartspacerSource.weather() ?: HudSources.weather(c, now, zone, today)
-        var weatherBlock: Block? = null
-        var extra: List<Token> = emptyList()
-        if (weather != null) {
-            val others = ranked.sumOf { r -> r.block.segments.count { it.isNotEmpty() } }
-            if (others + 1 <= minOf(slots, 3)) {
-                weatherBlock = HudBlocks.weather(weather).copy(optional = true)
-            } else if (takeover == null) {
-                extra = HudBlocks.temperatureChip(weather.temp, weather.celsius)
-            }
-        }
+        val weatherBlock = weather?.let { HudBlocks.weather(it).copy(optional = true) }
+        val chip = if (weather != null && takeover == null) HudBlocks.temperatureChip(weather.temp, weather.celsius) else emptyList()
 
-        val blocks = listOfNotNull(weatherBlock) + ranked.sortedBy { it.cls }.map { it.block }
-        // the temperature chip takes the time's place on line 1: the status bar already shows the time
-        val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), headerBadge(c, now, zone, today, zdt.hour), showTime = extra.isEmpty())
-        return HudContent(header, blocks, headerExtra = if (takeover == null) extra else emptyList(), headerTap = headerTap)
+        val blocks = ranked.sortedBy { it.cls }.map { it.block }
+        val badge = headerBadge(c, now, zone, today, zdt.hour)
+        val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), badge)
+        val headerNoTime = if (takeover == null) HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), badge, showTime = false) else null
+        return HudContent(header, blocks, headerExtra = chip, headerTap = headerTap, weather = weatherBlock, headerCompact = headerNoTime)
     }
 
     /**

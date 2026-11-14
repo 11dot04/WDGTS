@@ -46,4 +46,8 @@ object HudPrefs {
     /** The button at the end of the now-playing line: the arrow (open the player), a pause pill, or the cassette pill. */
     fun musicControl(c: Context) = sp(c).getInt("music_control", CONTROL_ARROW)
     fun setMusicControl(c: Context, v: Int) = sp(c).edit().putInt("music_control", v).apply()
+
+    /** Material You: the date numeral, the weather bubble and the action pills take the system accent colour. */
+    fun materialYou(c: Context) = sp(c).getBoolean("material_you", false)
+    fun setMaterialYou(c: Context, on: Boolean) = sp(c).edit().putBoolean("material_you", on).apply()
 }

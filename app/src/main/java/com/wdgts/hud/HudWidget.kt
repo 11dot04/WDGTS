@@ -101,7 +101,7 @@ class HudWidget : ImageWidget() {
         if (CARD) drawColor(p.surface)
         val ink = if (CARD) p.onSurface else Color.WHITE
         val content = HudComposer.compose(ctx, HudSizing.of(w, h).bodyLines)
-        renderer(ctx).draw(this, w, h, content, HudColors(ink), iconPainter(ctx))
+        renderer(ctx).draw(this, w, h, content, HudColors(ink, if (HudPrefs.materialYou(ctx)) ctx.getColor(android.R.color.system_accent1_200) else null), iconPainter(ctx))
     }
 
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
