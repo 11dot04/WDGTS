@@ -86,7 +86,7 @@ abstract class MusicBase : ImageWidget() {
 
     protected fun Canvas.idleCard(ctx: Context, w: Int, h: Int) {
         val p = Palette.of(ctx)
-        val tf = Fonts.display(ctx)
+        val tf = Fonts.flex(ctx)
         val u = minOf(w, h) / 100f
         drawColor(p.surface)
         label("NOTHING", 8f * u, 0.50f * h, 11f * u, p.onSurface, tf, fvar = Fonts.axes(wght = 380, wdth = 110))
@@ -128,7 +128,7 @@ class MusicDepthWidget : MusicBase() {
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         if (!MusicState.hasSession) { idleCard(ctx, w, h); return }
         val p = Palette.of(ctx)
-        val tf = Fonts.display(ctx)
+        val tf = Fonts.flex(ctx)
         val mono = Fonts.mono(ctx)
         val u = minOf(w, h) / 100f
         val art = MusicState.art
@@ -205,7 +205,7 @@ class MusicFrameWidget : MusicBase() {
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         if (!MusicState.hasSession) { idleCard(ctx, w, h); return }
         val p = Palette.of(ctx)
-        val tf = Fonts.display(ctx)
+        val tf = Fonts.flex(ctx)
         val mono = Fonts.mono(ctx)
         val u = minOf(w, h) / 100f
         val on = controlsOn(ctx)
@@ -276,7 +276,7 @@ class MusicRoundWidget : MusicBase() {
 
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         val p = Palette.of(ctx)
-        val tf = Fonts.display(ctx)
+        val tf = Fonts.flex(ctx)
         val mono = Fonts.mono(ctx)
         val side = minOf(w, h).toFloat()
         val cx = w / 2f
