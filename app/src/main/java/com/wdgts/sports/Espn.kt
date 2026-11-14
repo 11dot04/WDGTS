@@ -27,22 +27,59 @@ object Espn {
     fun fetch(c: Context): Fetch {
         val id = Prefs.teamId(c)
         val leagues = Prefs.liveLeague(c)?.let { listOf(it) } ?: LEAGUES    // while live, poll only that competition
-        val fmt = java.time.format.DateTimeFormatter.BASIC_ISO_DATE
         val today = java.time.LocalDate.now()
-        val range = today.minusDays(2).format(fmt) + "-" + today.plusDays(40).format(fmt)
-        val all = ArrayList<Match>()
-        var anyOk = false
-        for (lg in leagues) {
-            val json = Http.get("https://site.api.espn.com/apis/site/v2/sports/soccer/$lg/scoreboard?dates=$range&limit=300")
-                ?: continue
-            anyOk = true
-            all += parse(json, lg, id)
+        val now = System.currentTimeMillis()
+        val dbg = StringBuilder()
+
+        // Stage 1: a small window (2 days back, 14 ahead) keeps each response light enough for a phone on mobile data.
+        val near = scan(leagues, today.minusDays(2), today.plusDays(14), id, dbg, "near")
+        val anyOk = near.ok
+        var pick = select(near.matches, now)
+        // Stage 2: nothing in that window (international break, cup draw pending): look further ahead.
+        if (pick == null && anyOk) {
+            val far = scan(leagues, today.plusDays(15), today.plusDays(75), id, dbg, "far")
+            pick = select(far.matches, now)
         }
+        // Stage 3: still nothing; ask ESPN's per-team fixture list directly.
+        if (pick == null && anyOk) {
+            val sched = ArrayList<Match>()
+            for (lg in leagues) {
+                val json = Http.get("https://site.api.espn.com/apis/site/v2/sports/soccer/$lg/teams/$id/schedule?fixture=true", 15000)
+                if (json == null) { dbg.append("team $lg: no response\n"); continue }
+                val ms = parse(json, lg, id)
+                dbg.append("team $lg: ${json.length / 1024} KB, ${ms.size} ours\n")
+                sched += ms
+            }
+            pick = select(sched, now)
+        }
+        dbg.append("picked: ").append(pick?.let { "${it.homeAbbr}-${it.awayAbbr} ${it.state} ${it.league}" } ?: "none")
+        Prefs.setEspnDebug(c, java.time.LocalDateTime.now().toString().take(16) + "\n" + dbg)
         if (!anyOk) return Fetch(false, null)
-        val pick = select(all, System.currentTimeMillis())
         Prefs.setLiveLeague(c, if (pick?.state == "in") pick.league else null)
         if (pick != null) { Crest.ensure(c, pick.homeLogo); Crest.ensure(c, pick.awayLogo) }
         return Fetch(true, pick)
+    }
+
+    private class Scan(val ok: Boolean, val matches: List<Match>)
+
+    /** One scoreboard request per league over [from]..[to]; [ok] when at least one league answered. */
+    private fun scan(
+        leagues: List<String>, from: java.time.LocalDate, to: java.time.LocalDate,
+        id: String, dbg: StringBuilder, tag: String,
+    ): Scan {
+        val fmt = java.time.format.DateTimeFormatter.BASIC_ISO_DATE
+        val range = from.format(fmt) + "-" + to.format(fmt)
+        val all = ArrayList<Match>()
+        var ok = false
+        for (lg in leagues) {
+            val json = Http.get("https://site.api.espn.com/apis/site/v2/sports/soccer/$lg/scoreboard?dates=$range&limit=300", 15000)
+            if (json == null) { dbg.append("$tag $lg: no response\n"); continue }
+            ok = true
+            val ms = parse(json, lg, id)
+            dbg.append("$tag $lg: ${json.length / 1024} KB, ${ms.size} ours\n")
+            all += ms
+        }
+        return Scan(ok, all)
     }
 
     /** Live match, else a result from the last 8 hours, else the next fixture, else the last result. */
