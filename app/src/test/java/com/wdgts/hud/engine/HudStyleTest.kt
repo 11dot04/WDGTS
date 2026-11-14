@@ -110,4 +110,30 @@ class HudStyleTest {
         assertEquals("Mehdi Hassan", HudText.cleanArtist("Mehdi Hassan - Topic"))
         assertEquals("Recommended Band", HudText.cleanArtist("Recommended Band"))
     }
+
+    @Test fun neverALoneEllipsis() {
+        val line = flow.layout(listOf<Token>(OutlinePill("X".repeat(40)), Text("B")), maxW, 1)
+        assertTrue(line.isEmpty() || line[0].any { !(it.token is Text && (it.token as Text).text == "…") })
+    }
+    @Test fun mergedCallsAndChipsLineSitsAtTheBottom() {
+        val packer = LinePacker(flow)
+        val line = listOf<Token>(GlyphToken(HudGlyph.SHAKA), Text("PAPA"), OutlinePill("+1"))
+        val missed = Block("missed", listOf(line + GlyphToken(HudGlyph.FOLLOWUP)), absorbs = "chips", absorbLine = line)
+        val health = Block("health", listOf(listOf<Token>(Text("170 DAYS"))))
+        val chips = Block("chips", listOf(listOf<Token>(Chip("a", "5"))), optional = true)
+        val out = packer.pack(listOf(missed, health, chips), 4, maxW)
+        assertTrue((out[0][0].token as? Text)?.text == "170")          // health first (words are laid out one by one)
+        assertTrue(out[1].any { it.token is Chip } && out[1].any { it.token is GlyphToken })   // calls + chips below it
+    }
+    @Test fun weatherTakesItsOwnLineOnlyWhenNothingElseIsPushedOff() {
+        val packer = LinePacker(flow)
+        val a = Block("a", listOf(listOf<Token>(Text("A"))))
+        val b = Block("b", listOf(listOf<Token>(Text("B"))))
+        val c = Block("c", listOf(listOf<Token>(Text("C"))))
+        val w = Block("weather", listOf(listOf<Token>(Text("SUNNY"))), optional = true)
+        val roomy = packer.packed(listOf(w, a, b), 3, maxW).second
+        assertTrue("weather" in roomy && roomy.containsAll(setOf("a", "b")))
+        val tight = packer.packed(listOf(w, a, b, c), 3, maxW).second
+        assertTrue(!tight.containsAll(setOf("a", "b", "c")))              // the renderer sees weather would displace a block
+    }
 }
