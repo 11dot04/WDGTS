@@ -75,6 +75,9 @@ object Prefs {
     fun setTeamId(c: Context, id: String) = sp(c).edit().putString("team_id", id).apply()
     fun matchJson(c: Context): String? = sp(c).getString("match_json", null)
     fun setMatchJson(c: Context, j: String?) = sp(c).edit().putString("match_json", j).apply()
+    /** What the last ESPN fetch saw, per request, for the settings screen. */
+    fun espnDebug(c: Context): String = sp(c).getString("espn_debug", "no fetch yet")!!
+    fun setEspnDebug(c: Context, s: String) = sp(c).edit().putString("espn_debug", s).apply()
     fun liveLeague(c: Context): String? = sp(c).getString("live_league", null)
     fun setLiveLeague(c: Context, l: String?) = sp(c).edit().putString("live_league", l).apply()
 
