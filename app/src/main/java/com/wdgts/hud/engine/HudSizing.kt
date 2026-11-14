@@ -15,4 +15,15 @@ object HudSizing {
         val lines = floor(avail / Hud.LINE_PITCH + 0.001f).toInt().coerceIn(Hud.MIN_LINES, Hud.MAX_LINES)
         return Size(unit, lines)
     }
+
+    /**
+     * The unit to draw at when the widget is to be filled: as big as the widest line (width) and the lines in use (height)
+     * allow, but never smaller than [base] and never more than 1.5 x it. [widestUnits] includes both side paddings.
+     */
+    fun fillUnit(widthPx: Int, heightPx: Int, base: Float, usedLines: Int, widestUnits: Float): Float {
+        if (usedLines <= 0 || widestUnits <= 0f) return base
+        val byWidth = widthPx / widestUnits
+        val byHeight = heightPx / (usedLines * Hud.LINE_PITCH + 2 * Hud.PAD_V)
+        return min(byWidth, byHeight).coerceIn(base, base * 1.5f)
+    }
 }

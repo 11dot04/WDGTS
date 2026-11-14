@@ -13,8 +13,8 @@ import android.graphics.Typeface
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** [accent] (Material You) tints a few shapes: the date numeral, the weather bubble and the action pills. Null = everything in [ink]. */
-class HudColors(val ink: Int, val accent: Int? = null)
+/** [accent] (Material You) tints a few shapes: the date numeral, the weather bubble and the action pills. Null = everything in [ink]. [fill] scales the text up to fill the widget. */
+class HudColors(val ink: Int, val accent: Int? = null, val fill: Boolean = false)
 
 /**
  * Lets the host app draw icons the engine has no SVG for (app icons, Smartspacer icons). Draw inside a [size]
@@ -88,8 +88,18 @@ class HudRenderer(
     private val packer = LinePacker(flow)
 
     /** Lays the content out for a widget of this pixel size, without drawing. */
-    fun lay(widthPx: Int, heightPx: Int, content: HudContent): Laid {
-        val size = HudSizing.of(widthPx, heightPx)
+    fun lay(widthPx: Int, heightPx: Int, content: HudContent, fill: Boolean = false): Laid {
+        val base = layAt(widthPx, heightPx, content, HudSizing.of(widthPx, heightPx))
+        if (!fill) return base
+        // scale up so the widest line spans the widget's width, or the lines in use span its height, whichever comes first
+        val used = base.lines.indexOfLast { it.isNotEmpty() } + 1
+        val widest = (base.lines.maxOfOrNull { l -> l.maxOfOrNull { it.x + it.w } ?: 0f } ?: 0f) + 2 * Hud.PAD_H
+        val unit = HudSizing.fillUnit(widthPx, heightPx, base.unit, used, widest)
+        if (unit <= base.unit * 1.02f) return base
+        return layAt(widthPx, heightPx, content, HudSizing.Size(unit, base.size.lines))
+    }
+
+    private fun layAt(widthPx: Int, heightPx: Int, content: HudContent, size: HudSizing.Size): Laid {
         val maxW = widthPx / size.unit - 2 * Hud.PAD_H
         val lines = ArrayList<List<Placed>>(size.lines)
         var blocks = content.blocks
@@ -116,7 +126,7 @@ class HudRenderer(
     }
 
     fun draw(c: Canvas, widthPx: Int, heightPx: Int, content: HudContent, colors: HudColors, icons: IconPainter? = null) {
-        val laid = lay(widthPx, heightPx, content)
+        val laid = lay(widthPx, heightPx, content, colors.fill)
         val unit = laid.unit
         val pitch = Hud.LINE_PITCH * unit
         val top0 = Hud.PAD_V * unit   // anchored to the top

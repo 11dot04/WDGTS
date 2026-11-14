@@ -100,4 +100,9 @@ object HudRules {
 
     /** A subtitle that names a time or a duration ("at 20:50", "in 7 min", "tomorrow"): such a line already carries enough graphics, so it gets no icon. */
     fun mentionsTime(s: String): Boolean = TIME_TEXT.containsMatchIn(s)
+
+    private val DATE_TEXT = Regex("""(?i)^\s*(?:(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+)?(?:\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2})(?:,?\s+\d{4})?\s*$""")
+
+    /** "Sat, 14 Nov", "14 November", "Nov 14": the HUD draws the date itself, so a date that comes from Smartspacer is not repeated. */
+    fun isDate(s: String): Boolean = DATE_TEXT.matches(s)
 }
