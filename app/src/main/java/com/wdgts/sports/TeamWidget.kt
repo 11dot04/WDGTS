@@ -126,23 +126,32 @@ class TeamWidget : ImageWidget() {
         label("NEXT · $tag", pad, ty, ts, b.onBlock, mono, tracking = 0.06f, fvar = Fonts.monoW(650))
         label(leagueTag(m.league), w - pad, ty, ts, b.onBlock, mono, Paint.Align.RIGHT, 0.06f, Fonts.monoW(650))
 
+        // our own team, small, in front of the opponent: "ARSENAL V"
+        val maxW = w - 2 * pad
+        val ours = (if (m.teamIsHome) m.homeName else m.awayName).uppercase()
+        val os = 4.4f * u
+        val oy = bandH + 1.1f * u + 0.8f * pad + 0.72f * os
+        label(ellipsize("$ours V", maxW, os, mono), pad, oy, os, b.soft, mono, tracking = 0.08f, fvar = Fonts.monoW(600))
+
         // opponent: heavy caps, up to two lines, as large as the card allows
         val opp = (if (m.teamIsHome) m.awayName else m.homeName).uppercase()
-        val wf = wrapFit(opp, w - 2 * pad, 2, 17f * u, tf, wght = 860, minWdth = 75, maxWdth = 118)
-        var y = bandH + 1.1f * u + 0.6f * pad + wf.size * 0.78f
+        val wf = wrapFit(opp, maxW, 2, 17f * u, tf, wght = 860, minWdth = 60, maxWdth = 118)
+        // a single long word can still be wider than the card after condensing: shrink it to fit
+        val widest = wf.lines.maxOfOrNull { measureText(it, wf.size, tf, 0f, wf.fvar) } ?: 0f
+        val ns = if (widest > maxW) wf.size * maxW / widest else wf.size
+        var y = oy + 0.8f * os + ns * 0.78f
         wf.lines.forEach { line ->
-            label(line, pad, y, wf.size, b.ink, tf, fvar = wf.fvar)
-            y += wf.size * 0.92f
+            label(line, pad, y, ns, b.ink, tf, fvar = wf.fvar)
+            y += ns * 0.92f
         }
 
         // kickoff chip, bottom left
         val text = kickoffText(m.kickoffMs).uppercase()
-        val maxW = w - 2 * pad
         var cs = 5.4f * u
         val cw = chipWidth(text, cs, mono, Fonts.monoW(650))
         if (cw > maxW) cs *= maxW / cw
-        val cy = h - pad - 1.05f * cs - 0.3f * cs
-        chip(text, pad, cy, cs, mono, Fonts.monoW(650), b.block, b.onBlock, b.ink)
+        val cy = h - pad - 1.05f * cs
+        chip(text, pad, cy, cs, mono, Fonts.monoW(650), b.block, b.onBlock, b.ink, flat = true)
     }
 
     /** Live or full time: crests in the corners, a status chip between them, two huge numerals, a rule and the footer. */
