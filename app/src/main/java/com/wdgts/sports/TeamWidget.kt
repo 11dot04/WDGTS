@@ -8,7 +8,6 @@ import android.graphics.Canvas
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.RectF
 import android.net.Uri
 import android.widget.RemoteViews
@@ -26,6 +25,9 @@ import java.util.Locale
 /**
  * Next match / live score / result for one team (ESPN team id in settings; 359 = Arsenal).
  * Polls every minute while live, every few minutes around kickoff, otherwise every half hour.
+ *
+ * Neo-brutalist: flat paper and one loud block colour, heavy wide numerals, hard rules, stamped chips with hard
+ * shadows. Colours come from [Bold] (Material You unless the setting turns it off).
  */
 class TeamWidget : ImageWidget() {
 
@@ -74,53 +76,131 @@ class TeamWidget : ImageWidget() {
     }
 
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
-        val p = Palette.of(ctx)
-        val tf = Fonts.display(ctx)
-        val u = minOf(w, h) / 100f
-        drawColor(p.surface)
+        val b = Bold.of(ctx)
         val m = Prefs.matchJson(ctx)?.let { Match.fromJson(it) }
-        if (m == null) {
-            label("NO MATCH", w / 2f, 0.47f * h, 9f * u, p.muted, tf, Paint.Align.CENTER, fvar = Fonts.axes(wght = 420))
-            label("SCHEDULED", w / 2f, 0.47f * h + 9.6f * u, 9f * u, p.faint, tf, Paint.Align.CENTER, fvar = Fonts.axes(wght = 420))
-            return
+        when {
+            m == null -> paintEmpty(ctx, w, h, b)
+            m.state == "pre" -> paintNext(ctx, w, h, b, m)
+            else -> paintScore(ctx, w, h, b, m)
         }
-        val home = Crest.load(ctx, m.homeLogo)
-        val away = Crest.load(ctx, m.awayLogo)
+    }
 
-        if (m.state == "pre") {
-            // ---- upcoming: same composition as the static KWGT card ----
-            val ours = if (m.teamIsHome) home else away
-            ours?.let { crest(it, 0.11f * w, 0.07f * h, 0.38f * w, p.accent) }
-            val tag = if (m.teamIsHome) Prefs.homeTag(ctx) else "AWAY"
-            label("NEXT • $tag", 0.07f * w, 0.70f * h, 6f * u, p.muted, tf, fvar = Fonts.axes(wght = 600))
+    /** No fixture: paper, a heavy two-line message and a block strip. */
+    private fun Canvas.paintEmpty(ctx: Context, w: Int, h: Int, b: Bold) {
+        val u = minOf(w, h) / 100f
+        val pad = 7f * u
+        val face = BoldFonts.numerals(ctx)
+        val mono = Fonts.geist(ctx)
+        drawColor(b.paper)
+        val (s, v) = fitFace("MATCH", w - 2 * pad, 26f * u, face)      // the longer line sets size and width for both
+        val y1 = 0.40f * h
+        label("NO", pad, y1, s, b.ink, face.tf, fvar = v)
+        label("MATCH", pad, y1 + s * 0.86f, s, b.ink, face.tf, fvar = v)
+        val top = 0.82f * h
+        flat(0f, top, w.toFloat(), h.toFloat(), b.block)
+        label("SCHEDULED", pad, (top + h) / 2f + 0.36f * 5.4f * u, 5.4f * u, b.onBlock, mono, tracking = 0.08f, fvar = Fonts.monoW(650))
+    }
 
-            val opp = if (m.teamIsHome) m.awayName else m.homeName
-            val iconS = 6.2f * u
-            stadium(0.07f * w, 0.82f * h - iconS * 0.9f, iconS, p.accent)
-            val ox = 0.07f * w + iconS * 1.5f
-            val (os, ov) = fitByAxis(opp, w - ox - 6f * u, 8.6f * u, tf, wght = 420, wdthMax = 100)
-            label(opp, ox, 0.82f * h, os, p.accent, tf, fvar = ov)
-            val (ts, tv) = fitByAxis(kickoffText(m.kickoffMs), w - 12f * u, 7.8f * u, tf, wght = 400, wdthMax = 100)
-            label(kickoffText(m.kickoffMs), 0.07f * w, 0.92f * h, ts, p.accent, tf, fvar = tv)
-            return
+    /** Upcoming: a block band with the tag, the opponent in heavy caps over a crest watermark, a stamped kickoff chip. */
+    private fun Canvas.paintNext(ctx: Context, w: Int, h: Int, b: Bold, m: Match) {
+        val u = minOf(w, h) / 100f
+        val pad = 7f * u
+        val tf = Fonts.display(ctx)
+        val mono = Fonts.geist(ctx)
+        drawColor(b.paper)
+
+        // opponent crest as a quiet watermark, bleeding off the bottom right
+        val oppLogo = if (m.teamIsHome) m.awayLogo else m.homeLogo
+        Crest.load(ctx, oppLogo)?.let {
+            val s = 0.80f * minOf(w, h)
+            silhouette(it, w - 0.55f * s, h - 0.70f * s, s, mix(b.paper, b.ink, 0.13f))
         }
 
-        // ---- live or finished: home crest left, away crest right, big score ----
+        // band: tag left, competition right
+        val bandH = 0.26f * h
+        flat(0f, 0f, w.toFloat(), bandH, b.block)
+        flat(0f, bandH, w.toFloat(), bandH + 1.1f * u, b.ink)
+        val ts = 5f * u
+        val tag = if (m.teamIsHome) Prefs.homeTag(ctx) else "AWAY"
+        val ty = bandH / 2f + 0.36f * ts
+        label("NEXT · $tag", pad, ty, ts, b.onBlock, mono, tracking = 0.06f, fvar = Fonts.monoW(650))
+        label(leagueTag(m.league), w - pad, ty, ts, b.onBlock, mono, Paint.Align.RIGHT, 0.06f, Fonts.monoW(650))
+
+        // opponent: heavy caps, up to two lines, as large as the card allows
+        val opp = (if (m.teamIsHome) m.awayName else m.homeName).uppercase()
+        val wf = wrapFit(opp, w - 2 * pad, 2, 17f * u, tf, wght = 860, minWdth = 75, maxWdth = 118)
+        var y = bandH + 1.1f * u + 0.6f * pad + wf.size * 0.78f
+        wf.lines.forEach { line ->
+            label(line, pad, y, wf.size, b.ink, tf, fvar = wf.fvar)
+            y += wf.size * 0.92f
+        }
+
+        // kickoff chip, bottom left
+        val text = kickoffText(m.kickoffMs).uppercase()
+        val maxW = w - 2 * pad
+        var cs = 5.4f * u
+        val cw = chipWidth(text, cs, mono, Fonts.monoW(650))
+        if (cw > maxW) cs *= maxW / cw
+        val cy = h - pad - 1.05f * cs - 0.3f * cs
+        chip(text, pad, cy, cs, mono, Fonts.monoW(650), b.block, b.onBlock, b.ink)
+    }
+
+    /** Live or full time: crests in the corners, a status chip between them, two huge numerals, a rule and the footer. */
+    private fun Canvas.paintScore(ctx: Context, w: Int, h: Int, b: Bold, m: Match) {
+        val u = minOf(w, h) / 100f
+        val pad = 7f * u
         val live = m.state == "in"
-        val cs = 0.26f * minOf(w, h)
-        val pad = 0.07f * w
-        home?.let { crest(it, pad, 0.07f * h, cs, p.accent) }
-        away?.let { crest(it, w - pad - cs, 0.07f * h, cs, p.accent) }
-        val status = if (live) "LIVE • ${m.clock.ifEmpty { "–" }}" else "FT"
-        label(status, w / 2f, 0.20f * h, 5.2f * u, if (live) p.accent else p.muted, Fonts.MONO, Paint.Align.CENTER, 0.06f)
+        val ground = if (live) b.block else b.paper
+        val fg = if (live) b.onBlock else b.ink
+        val soft = if (live) b.onBlock else b.soft
+        val mono = Fonts.geist(ctx)
+        val face = BoldFonts.numerals(ctx)
+        drawColor(ground)
 
-        val score = "${m.homeScore.ifEmpty { "0" }}–${m.awayScore.ifEmpty { "0" }}"
-        val (ss, sv) = fitByAxis(score, w * 0.84f, 30f * u, tf, wght = 560, wdthMax = 125)
-        label(score, w / 2f, baselineFor(0.58f * h, ss, tf), ss, p.onSurface, tf, Paint.Align.CENTER, fvar = sv)
+        // crests
+        val cs = 0.21f * minOf(w, h)
+        val top = 0.05f * h
+        Crest.load(ctx, m.homeLogo)?.let { crest(it, pad, top, cs, fg) }
+        Crest.load(ctx, m.awayLogo)?.let { crest(it, w - pad - cs, top, cs, fg) }
 
-        label(m.homeAbbr.uppercase(), pad, 0.86f * h, 5.6f * u, p.muted, Fonts.MONO, tracking = 0.06f)
-        label(m.awayAbbr.uppercase(), w - pad, 0.86f * h, 5.6f * u, p.muted, Fonts.MONO, Paint.Align.RIGHT, 0.06f)
-        label(leagueTag(m.league), w / 2f, 0.86f * h, 5.0f * u, p.faint, Fonts.MONO, Paint.Align.CENTER, 0.08f)
+        // status chip between them
+        val hs = m.homeScore.toIntOrNull()
+        val aS = m.awayScore.toIntOrNull()
+        val res = if (!live && hs != null && aS != null) {
+            val d = if (m.teamIsHome) hs - aS else aS - hs
+            if (d > 0) "WIN" else if (d < 0) "LOSS" else "DRAW"
+        } else null
+        val status = if (live) "LIVE ${m.clock.ifEmpty { "–" }}" else if (res != null) "FT · $res" else "FT"
+        val gap = w - 2 * (pad + cs) - 4f * u
+        var ss = 5f * u
+        val sw = chipWidth(status, ss, mono, Fonts.monoW(700))
+        if (sw > gap) ss *= gap / sw
+        val sx = (w - chipWidth(status, ss, mono, Fonts.monoW(700))) / 2f
+        chip(
+            status, sx, top + cs / 2f, ss, mono, Fonts.monoW(700),
+            fill = if (live) b.paper else b.block, textColor = if (live) b.ink else b.onBlock, edge = fg,
+        )
+
+        // numerals
+        val yBase = 0.80f * h
+        val figH = 0.44f * h
+        val homeS = m.homeScore.ifEmpty { "0" }
+        val awayS = m.awayScore.ifEmpty { "0" }
+        val colW = 0.5f * w - pad - 6f * u
+        val longest = if (homeS.length >= awayS.length) homeS else awayS
+        val (ns, nv) = fitFace(longest, colW, figureSize(face, figH), face)
+        label(homeS, pad, yBase, ns, fg, face.tf, Paint.Align.LEFT, 0f, nv)
+        label(awayS, w - pad, yBase, ns, fg, face.tf, Paint.Align.RIGHT, 0f, nv)
+        val my = yBase - figH * 0.5f
+        flat(w / 2f - 3.2f * u, my - 1.2f * u, w / 2f + 3.2f * u, my + 1.2f * u, fg)
+
+        // rule and footer
+        val ruleY = 0.855f * h
+        flat(0f, ruleY, w.toFloat(), ruleY + 1.1f * u, fg)
+        val fy = (ruleY + 1.1f * u + h) / 2f + 0.36f * 5.4f * u
+        label(m.homeAbbr.uppercase(), pad, fy, 5.4f * u, fg, mono, Paint.Align.LEFT, 0.06f, Fonts.monoW(700))
+        label(m.awayAbbr.uppercase(), w - pad, fy, 5.4f * u, fg, mono, Paint.Align.RIGHT, 0.06f, Fonts.monoW(700))
+        label(leagueTag(m.league), w / 2f, fy, 4.6f * u, soft, mono, Paint.Align.CENTER, 0.08f, Fonts.monoW(450))
     }
 
     /** Crest drawn as a one-colour duotone (luminance -> [tint]) so it matches the card. */
@@ -139,14 +219,6 @@ class TeamWidget : ImageWidget() {
         val dw = bmp.width * s
         val dh = bmp.height * s
         drawBitmap(bmp, null, RectF(left + (size - dw) / 2, top + (size - dh) / 2, left + (size + dw) / 2, top + (size + dh) / 2), paint)
-    }
-
-    private fun Canvas.stadium(x: Float, y: Float, s: Float, color: Int) {
-        val f = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color }
-        val path = Path()
-        path.addRoundRect(RectF(x, y + s * 0.35f, x + s, y + s), s * 0.3f, s * 0.3f, Path.Direction.CW)
-        drawPath(path, f)
-        for (i in 0..2) drawRect(x + s * (0.06f + i * 0.34f), y, x + s * (0.26f + i * 0.34f), y + s * 0.3f, f)
     }
 
     private fun leagueTag(l: String) = when (l) {
