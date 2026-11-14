@@ -13,7 +13,8 @@ import android.graphics.Typeface
 import kotlin.math.cos
 import kotlin.math.sin
 
-class HudColors(val ink: Int)
+/** [accent] (Material You) tints a few shapes: the date numeral, the weather bubble and the action pills. Null = everything in [ink]. */
+class HudColors(val ink: Int, val accent: Int? = null)
 
 /**
  * Lets the host app draw icons the engine has no SVG for (app icons, Smartspacer icons). Draw inside a [size]
@@ -91,10 +92,26 @@ class HudRenderer(
         val size = HudSizing.of(widthPx, heightPx)
         val maxW = widthPx / size.unit - 2 * Hud.PAD_H
         val lines = ArrayList<List<Placed>>(size.lines)
-        val withExtra = content.header + content.headerExtra
-        val headerLine = if (content.headerExtra.isNotEmpty()) flow.layout(withExtra, maxW, 2).takeIf { it.size == 1 } else null
-        lines += (headerLine ?: flow.layout(content.header, maxW, 1)).firstOrNull() ?: emptyList()
-        lines += packer.pack(content.blocks, size.bodyLines, maxW)
+        var blocks = content.blocks
+        var header = content.header
+        var extra = content.headerExtra
+        val wb = content.weather
+        if (wb != null) {
+            // the weather gets its own line when that costs no other block its place (a merged calls + chips line frees one);
+            // otherwise it shrinks to a temperature chip on line 1, which also drops the time
+            val without = packer.packed(content.blocks, size.bodyLines, maxW).second
+            val with = packer.packed(listOf(wb) + content.blocks, size.bodyLines, maxW).second
+            if (wb.id in with && with.containsAll(without)) {
+                blocks = listOf(wb) + content.blocks
+                extra = emptyList()
+            } else if (content.headerCompact != null) {
+                header = content.headerCompact
+            }
+        }
+        val withExtra = header + extra
+        val headerLine = if (extra.isNotEmpty()) flow.layout(withExtra, maxW, 2).takeIf { it.size == 1 } else null
+        lines += (headerLine ?: flow.layout(header, maxW, 1)).firstOrNull() ?: emptyList()
+        lines += packer.pack(blocks, size.bodyLines, maxW)
         return Laid(size.unit, size, lines)
     }
 
@@ -105,11 +122,14 @@ class HudRenderer(
         val top0 = Hud.PAD_V * unit   // anchored to the top
         laid.lines.forEachIndexed { i, line ->
             val cy = top0 + i * pitch + pitch / 2f
-            for (p in line) draw(c, p.token, (Hud.PAD_H + p.x) * unit, cy, p.w * unit, unit, colors.ink, icons)
+            for (p in line) draw(c, p.token, (Hud.PAD_H + p.x) * unit, cy, p.w * unit, unit, if (colors.accent != null && accented(p.token)) colors.accent else colors.ink, icons)
         }
     }
 
     private fun size(capUnits: Float, u: Float) = capUnits * u / capRatio
+
+    private fun accented(t: Token): Boolean = t is NumeralPill || t is Bubble ||
+        (t is GlyphToken && (t.glyph == HudGlyph.FOLLOWUP || t.glyph == HudGlyph.ADD || t.glyph == HudGlyph.ARROW_NE || t.glyph == HudGlyph.PAUSE || t.glyph == HudGlyph.CASSETTE))
 
     /**
      * Draws [s] at [baseSize]; runs of double-width characters (CJK, kana, emoji) are drawn at [Hud.WIDE_SCALE]

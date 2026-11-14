@@ -140,4 +140,10 @@ data class HudContent(
     val blocks: List<Block>,
     val headerExtra: List<Token> = emptyList(),
     val headerTap: TapRef? = null,
+    /**
+     * The weather as its own line. The renderer uses it when it fits without pushing anything else off the widget;
+     * otherwise it falls back to [headerExtra] (the temperature chip) on line 1 with [headerCompact] (the header without the time).
+     */
+    val weather: Block? = null,
+    val headerCompact: List<Token>? = null,
 )

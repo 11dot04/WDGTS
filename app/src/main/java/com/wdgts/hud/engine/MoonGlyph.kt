@@ -23,12 +23,12 @@ object MoonGlyph {
     /** Craters as (dx, dy, radius), in units of the disc's radius. */
     private val CRATERS = arrayOf(floatArrayOf(-0.30f, -0.34f, 0.17f), floatArrayOf(0.32f, 0.04f, 0.12f), floatArrayOf(-0.06f, 0.42f, 0.10f))
 
-    private fun silhouette(cx: Float, cy: Float, r: Float): Path {
+    private fun silhouette(cx: Float, cy: Float, r: Float, bump: Float): Path {
         val p = Path()
         val n = 72
         for (i in 0..n) {
             val a = (2.0 * Math.PI * i / n).toFloat()
-            val rr = r * (1f + BUMP * cos(LOBES * a))
+            val rr = r * (1f + bump * cos(LOBES * a))
             val x = cx + rr * cos(a)
             val y = cy + rr * sin(a)
             if (i == 0) p.moveTo(x, y) else p.lineTo(x, y)
@@ -55,15 +55,16 @@ object MoonGlyph {
         return out
     }
 
-    fun draw(c: Canvas, cx: Float, cy: Float, r: Float, elongation: Double, ink: Int, stroke: Float) {
+    fun draw(c: Canvas, cx: Float, cy: Float, r: Float, elongation: Double, ink: Int, stroke: Float, bump: Float = BUMP, darkAlpha: Int = 0) {
         val layer = c.saveLayer(cx - r * 1.3f, cy - r * 1.3f, cx + r * 1.3f, cy + r * 1.3f, null)
         c.rotate(TILT, cx, cy)
         val rr = r - stroke / 2f
-        val sil = silhouette(cx, cy, rr)
+        val sil = silhouette(cx, cy, rr, bump)
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ink; style = Paint.Style.FILL }
         val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ink; style = Paint.Style.STROKE; strokeWidth = stroke; strokeJoin = Paint.Join.ROUND }
         val clear = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR) }
         val litPath = lit(cx, cy, rr, elongation, sil)
+        if (darkAlpha > 0) c.drawPath(sil, Paint(fill).apply { alpha = darkAlpha })    // the unlit side, faint
         c.drawPath(sil, ring)
         c.drawPath(litPath, fill)
         val save = c.save()

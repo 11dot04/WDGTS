@@ -119,13 +119,17 @@ class FlowLayout(
 
     private fun truncate(lines: List<List<Placed>>, maxLines: Int, maxW: Float): List<Line> {
         if (lines.size <= maxLines) return lines
-        val kept = lines.take(maxLines).map { it.toMutableList() }
+        val kept = lines.take(maxLines).map { it.toMutableList() }.toMutableList()
         val last = kept.last()
         val ell = m.body("…")
         while (last.isNotEmpty() && last.last().let { it.x + it.w + ell } > maxW) {
             last.removeAt(last.lastIndex)
         }
-        val x = last.lastOrNull()?.let { it.x + it.w } ?: 0f
+        if (last.isEmpty()) {            // nothing but the ellipsis would be left: show nothing rather than a lone "…"
+            kept.removeAt(kept.lastIndex)
+            return kept
+        }
+        val x = last.last().let { it.x + it.w }
         last += Placed(Text("…"), x, ell)
         return kept
     }
@@ -239,10 +243,11 @@ class LinePacker(private val flow: FlowLayout) {
             val theirs = other.segments.firstOrNull { it.isNotEmpty() } ?: continue
             val joined = b.absorbLine + Space + theirs
             if (!flow.fits(joined, maxW)) continue
+            // the merged line sits where the absorbed block was: calls and chips both live at the bottom
             out = out.mapNotNull { x ->
                 when (x.id) {
-                    b.id -> b.copy(segments = listOf(joined), compact = null, folds = emptyList(), absorbs = null)
-                    id -> null
+                    b.id -> null
+                    id -> b.copy(segments = listOf(joined), compact = null, folds = emptyList(), absorbs = null)
                     else -> x
                 }
             }
@@ -250,10 +255,15 @@ class LinePacker(private val flow: FlowLayout) {
         return out
     }
 
-    fun pack(blocks: List<Block>, slots: Int, maxW: Float): List<Line> {
+    fun pack(blocks: List<Block>, slots: Int, maxW: Float): List<Line> = packed(blocks, slots, maxW).first
+
+    /** The lines, and the ids of the blocks that got a line (an absorbed block counts as placed with the one that absorbed it). */
+    fun packed(blocks: List<Block>, slots: Int, maxW: Float): Pair<List<Line>, Set<String>> {
         val out = MutableList<Line>(slots) { emptyList() }
+        val ids = HashSet<String>()
         var last: HudGlyph? = null
         for (pl in HudPlan.plan(absorb(blocks, maxW).map { fold(it, maxW) }, slots)) {
+            ids += pl.block.id
             if (pl.compact) {
                 val (toks, g) = ActionPills.apply(pl.block.compact.orEmpty(), last)
                 last = g
@@ -267,7 +277,7 @@ class LinePacker(private val flow: FlowLayout) {
                 out[pl.start + i] = flow.layout(toks, maxW, 1).firstOrNull() ?: emptyList()
             }
         }
-        return out
+        return out to ids
     }
 }
 
