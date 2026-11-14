@@ -34,9 +34,11 @@ object Fonts {
     private val system: Typeface by lazy { Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 450, false) }
     private var flexLoaded = false
 
-    fun display(c: Context): Typeface {
-        // setting: the system font (HUD and music never come through here)
-        if (Prefs.systemFont(c)) { fvar = null; return system }
+    /** The widgets' face: the system sans when the setting asks for it, otherwise Google Sans Flex. */
+    fun display(c: Context): Typeface = if (Prefs.systemFont(c)) { fvar = null; system } else flex(c)
+
+    /** Google Sans Flex always (the music widgets keep it whatever the setting says). */
+    fun flex(c: Context): Typeface {
         cache?.let { if (flexLoaded && fvar == null) fvar = axes(); return it }
         val flex = runCatching { Typeface.createFromAsset(c.assets, "fonts/display.ttf") }.getOrNull()
         if (flex != null) { fvar = axes(); flexLoaded = true }
