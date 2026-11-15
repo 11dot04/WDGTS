@@ -69,7 +69,11 @@ class SettingsActivity : Activity() {
             "Geist Mono (HUD): ${if (gm) "bundled" else "MISSING, the HUD uses the app's mono font"}")
         val sysFont = Switch(this).apply { text = "System font in widgets (the HUD and music keep theirs)"; isChecked = Prefs.systemFont(this@SettingsActivity) }
         col.addView(sysFont)
-        val shapesSw = Switch(this).apply { text = "Streaks: Material shapes on the small tiles"; isChecked = Prefs.streakShapes(this@SettingsActivity) }
+        val shapesSw = Switch(this).apply {
+            text = "Streaks: Material shapes on the small tiles"
+            isChecked = Prefs.streakShapes(this@SettingsActivity)
+            setOnCheckedChangeListener { _, on -> Prefs.setStreakShapes(this@SettingsActivity, on); com.wdgts.widgets.StreaksWidget.refreshAll(applicationContext) }
+        }
         col.addView(shapesSw)
         Fonts.display(this)
         note("Axes in use: " + (Fonts.fvar ?: "none (system font, or variable font not loaded)"))
