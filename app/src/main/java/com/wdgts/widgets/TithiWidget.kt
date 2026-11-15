@@ -139,8 +139,11 @@ class TithiWidget : AppWidgetProvider() {
             val spEnd = tithiLeft + measureText(kp, size, tf, 0f, fv)
             val numStart = right - measureText(num, size, tf, 0f, fv)
             val moonR = size * 0.42f
+            val moonCy = y1 - size * 0.35f
             if (numStart - spEnd > moonR * 2f + 4f * u) {
-                MoonGlyph.draw(this, (spEnd + numStart) / 2f, y1 - size * 0.35f, moonR, d.elongation, p.onSurface)
+                MoonGlyph.draw(this, (spEnd + numStart) / 2f, moonCy, moonR, d.elongation, p.onSurface)      // between SP/KP and the number
+            } else if (tithiLeft - left > moonR * 2f + 2f * u) {
+                MoonGlyph.draw(this, tithiLeft - 1.4f * u - moonR, moonCy, moonR, d.elongation, p.onSurface)  // no room there: before SP/KP
             }
             label(num, right, y1, size, p.accent, tf, Paint.Align.RIGHT, fvar = fv)
 
@@ -179,9 +182,15 @@ class TithiWidget : AppWidgetProvider() {
                 label("SPLR", left, b1, bs, ink, tf, fvar = bv)
                 label("D+$off", left, b2, bs, ink, tf, fvar = bv)
                 val mx = 0.52f * w
-                label("MINUS", mx, b1, bs, ink, tf, fvar = bv)
+                val mw = label("MINUS", mx, b1, bs, ink, tf, fvar = bv)
                 val ow = label("ONE", mx, b2, bs, ink, tf, fvar = bv)
-                arrow(mx + ow + 5.4f * u, b2 - bs * 0.36f, 1.78f * u, ink, 0.77f * u, diagonal = false)
+                // the back arrow ends where MINUS ends and sits on the middle of ONE's capitals; as long as the room after ONE allows
+                val capBox = android.graphics.Rect()
+                textPaint(bs, 0, tf, fvar = bv).getTextBounds("ONE", 0, 3, capBox)
+                val capMid = b2 + (capBox.top + capBox.bottom) / 2f
+                val room = (mw - ow - 1.6f * u).coerceIn(3.2f * u, 4.2f * u)           // shaft length
+                val ah = room / (2f * 1.41421356f)
+                arrow(mx + mw - ah * 1.41421356f - 0.35f * u, capMid, ah, ink, 0.7f * u, diagonal = false)
                 nextHalves(right, btnCy, 5.76f * u, ink, tf, 5.0f * u)
             }
         }
@@ -234,16 +243,20 @@ class TithiWidget : AppWidgetProvider() {
         private fun Canvas.nextHalves(rightX: Float, cy: Float, r: Float, color: Int, tf: android.graphics.Typeface, ts: Float) {
             // two identical half-rings, bulging right; fitted to the KWGT card
             val ring = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color; it.style = Paint.Style.STROKE; it.strokeCap = Paint.Cap.BUTT }
-            val w = r * 0.26f
+            val w = r * 0.31f
             ring.strokeWidth = w
             val flat2 = rightX - 2f * r + r * 0.214f           // the front ring's rightmost point is 4.5u from the edge
             val flat1 = flat2 - r * 0.9f
             for (fl in floatArrayOf(flat1, flat2)) drawArc(RectF(fl - r + w / 2f, cy - r + w / 2f, fl + r - w / 2f, cy + r - w / 2f), -90f, 180f, false, ring)
             val unit = r / 5.76f
             val tx = rightX - 3.1f * unit                      // the word, reading upward, in the last 5.5u
+            // sized so that its length runs from the top edge of the arcs to their bottom edge
+            val axes = Fonts.axes(wght = 480)
+            val per = measureText("NEXT", 100f, tf, 0.02f, axes) / 100f
+            val fit = 2f * r / per
             save()
             rotate(-90f, tx, cy)
-            label("NEXT", tx, cy + ts * 0.35f, ts, color, tf, Paint.Align.CENTER, 0.02f, Fonts.axes(wght = 480))
+            label("NEXT", tx, cy + fit * 0.35f, fit, color, tf, Paint.Align.CENTER, 0.02f, axes)
             restore()
         }
     }

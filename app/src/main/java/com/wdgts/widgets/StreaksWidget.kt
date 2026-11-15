@@ -92,13 +92,25 @@ class StreaksWidget : AppWidgetProvider() {
             return b
         }
 
+        /** The most common opaque colour (5 bits per channel). */
+        private fun dominantOpaque(px: IntArray): Int? {
+            val counts = HashMap<Int, Int>()
+            for (c in px) if (Color.alpha(c) > 200) counts.merge(((Color.red(c) shr 3) shl 10) or ((Color.green(c) shr 3) shl 5) or (Color.blue(c) shr 3), 1, Int::plus)
+            val top = counts.maxByOrNull { it.value }?.key ?: return null
+            return Color.rgb(((top shr 10) and 31) shl 3, ((top shr 5) and 31) shl 3, (top and 31) shl 3)
+        }
+
+        private fun inkCoverage(b: Bitmap?): Float = b?.let { GlyphMask.trim(it) }?.let { GlyphMask.coverage(it) } ?: 0f
+
         /** Plain (non-adaptive) icon: keep what differs from the background colour, as alpha. */
         private fun extractGlyph(src: Bitmap): Bitmap {
             val n = src.width
             val px = IntArray(n * n)
             src.getPixels(px, 0, n, 0, 0, n, n)
             val corners = intArrayOf(px[0], px[n - 1], px[(n - 1) * n], px[n * n - 1])
-            val bg = corners.maxByOrNull { c -> corners.count { it == c } } ?: px[0]
+            // a shaped icon (an octagon badge) has transparent corners: its own dominant colour is then the background
+            val bg = if (corners.count { Color.alpha(it) > 200 } >= 3) corners.maxByOrNull { c -> corners.count { it == c } } ?: px[0]
+                     else dominantOpaque(px) ?: px[0]
             val br = Color.red(bg); val bgG = Color.green(bg); val bb = Color.blue(bg)
             for (i in px.indices) {
                 val c = px[i]
@@ -138,14 +150,23 @@ class StreaksWidget : AppWidgetProvider() {
         private fun adaptiveGlyph(ic: AdaptiveIconDrawable): Bitmap? {
             ic.monochrome?.let { return render(it, 432) }
             val n = 432
+            val fg = ic.foreground?.let { render(it, n) }
+            val fgCov = inkCoverage(fg)
+            // a foreground that is one solid shape (a badge): the drawing inside the badge is the glyph
+            if (fg != null && fgCov > 0.6f) {
+                val inner = extractGlyph(fg)
+                if (inkCoverage(inner) in 0.03f..0.55f) return inner
+            }
             val comp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
             val cv = Canvas(comp)
             ic.background?.let { it.setBounds(0, 0, n, n); it.draw(cv) }
             ic.foreground?.let { it.setBounds(0, 0, n, n); it.draw(cv) }
-            // a transparent background has no colour to subtract: use the foreground's shape
-            return if (Color.alpha(comp.getPixel(2, 2)) > 200) extractGlyph(comp) else ic.foreground?.let { render(it, n) }
+            val diff = if (Color.alpha(comp.getPixel(2, 2)) > 200) extractGlyph(comp) else null
+            // when the foreground's body is the background colour (a green owl on green) the difference leaves only its eyes:
+            // then the foreground's own shape is the better glyph
+            if (diff != null && (fg == null || inkCoverage(diff) >= 0.3f * fgCov)) return diff
+            return fg ?: diff
         }
-
 
         /** Material "public" globe (Apache 2.0), the two continent shapes only (the holes of the filled icon), in a 24-unit box. */
         private val CONTINENTS: Path by lazy {

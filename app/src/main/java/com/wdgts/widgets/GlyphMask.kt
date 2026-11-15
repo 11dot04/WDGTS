@@ -38,7 +38,7 @@ object GlyphMask {
     }
 
     /**
-     * Crops to the artwork but ignores stray specks: edges are placed where 0.4% of the ink lies outside,
+     * Crops to the artwork but ignores stray specks: edges are placed where 0.06% of the ink lies outside,
      * so one far-away pixel no longer shrinks the whole glyph.
      */
     fun trim(b: Bitmap): Bitmap? {
@@ -56,7 +56,7 @@ object GlyphMask {
             total += a
         }
         if (total == 0L) return null
-        val cut = (total * 0.004).toLong()
+        val cut = (total * 0.0006).toLong()      // was 0.4 %, which clipped the tips of diamonds (Brilliant)
         fun edge(sum: LongArray, fromStart: Boolean): Int {
             var acc = 0L
             if (fromStart) {

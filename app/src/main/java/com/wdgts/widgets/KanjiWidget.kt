@@ -111,12 +111,13 @@ class KanjiWidget : AppWidgetProvider() {
                 return
             }
 
-            // header: strokes and school grade left, JLPT level right (the tap zone). No rule: the type is the margin.
-            val hs = 6.2f * u
+            // header: strokes/grade and JLPT level float free of the margins on purpose (the tap zone is the level):
+            // the left one starts a fifth of the way in, the right one ends short of the edge. Bare, no rule.
+            val hs = 7.4f * u
             val hv = Fonts.axes(wght = 380, wdth = 105)
             val grade = if (day.grade > 0) day.grade.toString() else "–"
-            inkLabel("${day.strokes}S—($grade)", m, 0.104f * h, hs, p.muted, tf, fvar = hv)
-            inkLabel("N${day.level}", w - m, 0.104f * h, hs, p.muted, tf, Paint.Align.RIGHT, fvar = hv)
+            inkLabel("${day.strokes}S—($grade)", 0.21f * w, 0.088f * h, hs, p.muted, tf, fvar = hv)
+            inkLabel("N${day.level}", 0.85f * w, 0.088f * h, hs, p.muted, tf, Paint.Align.RIGHT, fvar = hv)
 
             // The glyph and the meanings go on separate layers and are combined with XOR, so where a long meaning
             // runs into the kanji the overlap is knocked out and both stay readable.
@@ -139,7 +140,12 @@ class KanjiWidget : AppWidgetProvider() {
             fun cap(slot: Int) = when (slotRow[slot]) { 2 -> beside; 1, 3 -> across; else -> half }
             val ms = 7.4f * u
             val mv = Fonts.axes(wght = 400, wdth = 100)
-            val meanings = day.meanings.take(7).toMutableList()
+            // dictionary notes ("river radical (no. 47)", "counter for ...") are not meanings; and anything that
+            // would have to shrink below 72% of the type size even in a wide slot is dropped rather than squeezed
+            val notes = Regex("radical|\\bno\\.|stroke|counter for|kokuji|\\(", RegexOption.IGNORE_CASE)
+            val meanings = day.meanings.filter { !notes.containsMatchIn(it) }
+                .filter { fitByAxis(it, across, ms, tf, wght = 400, wdthMin = 70, wdthMax = 100).first >= 0.72f * ms }
+                .take(7).toMutableList()
             fun nat(t: String) = measureText(t, ms, tf, 0f, mv)
             // long meanings swap into the wide slots
             val isLong = { i: Int -> i !in wide && nat(meanings[i]) * 0.78f > cap(i) }
@@ -162,22 +168,28 @@ class KanjiWidget : AppWidgetProvider() {
             drawBitmap(glyphLayer, 0f, 0f, null)
             glyphLayer.recycle(); textLayer.recycle()
 
-            // readings: two columns that share the margin and the centre axis, wrapping instead of shrinking
+            // readings: two columns anchored to the bottom margin, so one line each leaves no dead space under them.
+            // The block grows upward with the longer of the two, and both columns share one rule.
             val gut = 5f * u
             val colW = (w - 2 * m - gut) / 2f
             val x1 = m
             val x2 = m + colW + gut
-            val lineY = 0.715f * h
+            val rs = 6.2f * u
+            val ls = 3.8f * u
+            val fits = listOf(x1 to day.on, x2 to day.kun).map { (x, list) ->
+                x to fitLines(list.take(4).joinToString("、").ifEmpty { "—" }, colW, 2, rs, tf)
+            }
+            val lines = fits.maxOf { it.second.lines.size }
+            val lead = 1.2f * rs
+            val lastBase = h - m
+            val firstBase = lastBase - (lines - 1) * lead
+            val lineY = firstBase - 13.4f * u
             hairline(x1, lineY, x1 + colW, lineY, p.faint, 0.35f * u)
             hairline(x2, lineY, x2 + colW, lineY, p.faint, 0.35f * u)
-            val ls = 3.8f * u
             inkLabel("ON’YOMI", x1, lineY + 1.4f * u + ls, ls, p.muted, mono, tracking = 0.06f, fvar = Fonts.monoW(450))
             inkLabel("KUN’YOMI", x2, lineY + 1.4f * u + ls, ls, p.muted, mono, tracking = 0.06f, fvar = Fonts.monoW(450))
-            val rs = 6.2f * u
-            val ry = lineY + 13.4f * u
-            for ((x, list) in listOf(x1 to day.on, x2 to day.kun)) {
-                val f = fitLines(list.take(4).joinToString("、").ifEmpty { "—" }, colW, 2, rs, tf)
-                f.lines.forEachIndexed { i, l -> inkLabel(l, x, ry + i * f.size * 1.2f, f.size, p.accent, tf, fvar = f.fvar) }
+            for ((x, f) in fits) {
+                f.lines.forEachIndexed { i, l -> inkLabel(l, x, firstBase + i * lead, f.size, p.accent, tf, fvar = f.fvar) }
             }
         }
 
