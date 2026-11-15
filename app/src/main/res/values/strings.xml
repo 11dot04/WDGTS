@@ -9,6 +9,8 @@
     <string name="w_music_frame">Music · Frame</string>
     <string name="w_music_round">Music · Round</string>
     <string name="w_team">Team match</string>
+    <string name="w_wiki">Wikipedia</string>
+    <string name="w_wiki_body">Wikipedia text</string>
     <string name="w_f1">Formula 1</string>
     <string name="w_hud">HUD</string>
     <string name="d_tithi">Tithi, paksha and lunar month, with a tap-to-peek at tomorrow</string>
@@ -21,6 +23,8 @@
     <string name="d_music_frame">Cover art in a changing Material 3 shape, wavy progress and controls</string>
     <string name="d_music_round">Scalloped cover with a Material 3 Expressive wavy progress ring</string>
     <string name="d_team">Next match, live score and result for your team</string>
+    <string name="d_wiki">A featured Wikipedia article each day: headline and image. Tap for another</string>
+    <string name="d_wiki_body">The opening of the Wikipedia article. Tap to read it</string>
     <string name="d_f1">Next session countdown with the circuit layout</string>
     <string name="d_hud">Context-aware micrograph HUD: time, battery, weather, missed calls, events, alarms and more</string>
 </resources>
