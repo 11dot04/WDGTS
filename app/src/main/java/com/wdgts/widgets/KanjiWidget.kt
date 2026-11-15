@@ -90,11 +90,16 @@ class KanjiWidget : AppWidgetProvider() {
         }
 
         // ---------------------------------------------------------------- static card
+        /**
+         * One grid: a single margin [m] on both sides, a centre axis through the glyph and the gutter between the
+         * reading columns. Header, caption and readings hang off the margin; the two main meanings flank the glyph.
+         */
         private fun Canvas.drawKanji(ctx: Context, w: Int, h: Int, day: KanjiDay?) {
             val p = Palette.of(ctx)
             val tf = Fonts.display(ctx)
+            val mono = Fonts.geist(ctx)
             val u = minOf(w, h) / 100f
-            val pad = 5f * u
+            val m = 6f * u
             drawColor(p.surface)
 
             // glyph box: centre (50%, 37%), side 38% of the short edge. The overlay in the layout matches it.
@@ -106,47 +111,73 @@ class KanjiWidget : AppWidgetProvider() {
                 return
             }
 
-            val hs = 6.6f * u
+            // header: strokes and school grade left, JLPT level right (the tap zone). No rule: the type is the margin.
+            val hs = 6.2f * u
             val hv = Fonts.axes(wght = 380, wdth = 105)
             val grade = if (day.grade > 0) day.grade.toString() else "–"
-            label("${day.strokes}S—($grade)", 0.20f * w, 0.6f * pad + hs, hs, p.muted, tf, fvar = hv)
-            label("N${day.level}", 0.75f * w, 0.6f * pad + hs, hs, p.muted, tf, fvar = hv)
+            inkLabel("${day.strokes}S—($grade)", m, 0.104f * h, hs, p.muted, tf, fvar = hv)
+            inkLabel("N${day.level}", w - m, 0.104f * h, hs, p.muted, tf, Paint.Align.RIGHT, fvar = hv)
 
+            // The glyph and the meanings go on separate layers and are combined with XOR, so where a long meaning
+            // runs into the kanji the overlap is knocked out and both stay readable.
+            val glyphLayer = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val textLayer = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val gtf = Typeface.create(Typeface.SANS_SERIF, 700, false)
             val gs = s * 0.98f
-            label(day.kanji, cx, baselineFor(cy, gs, gtf), gs, p.tertiary, gtf, Paint.Align.CENTER)
+            Canvas(glyphLayer).label(day.kanji, cx, baselineFor(cy, gs, gtf), gs, p.tertiary, gtf, Paint.Align.CENTER)
 
-            // meanings flank the glyph: 1st, 3rd.. stack on the left; 2nd, 4th.. on the right (as in the KWGT version).
-            // Long ones are condensed with the width axis rather than shrunk.
-            val ms = 8f * u
-            val leftM = day.meanings.filterIndexed { i, _ -> i % 2 == 0 }.take(2)
-            val rightM = day.meanings.filterIndexed { i, _ -> i % 2 == 1 }.take(2)
-            leftM.forEachIndexed { i, t ->
-                val y = 0.465f * h + (i - (leftM.size - 1) / 2f) * 0.11f * h
-                val (sz, fv) = fitByAxis(t, 0.305f * w - pad, ms, tf, wght = 400, wdthMax = 100)
-                label(t, 0.305f * w, y, sz, p.accent, tf, Paint.Align.RIGHT, fvar = fv)
+            // Seven slots, zig-zagging down five rows: right-aligned ones hang off the right margin, left-aligned
+            // ones off the left. Rows 1 and 5 are free on both sides, row 3 sits beside the glyph, and rows 2 and 4
+            // (slots 2 and 5) have nobody opposite, so they are the wide ones and take the long meanings.
+            val rowY = floatArrayOf(0.235f, 0.340f, 0.445f, 0.550f, 0.655f)
+            val slotRow = intArrayOf(0, 1, 2, 2, 3, 4, 4)
+            val slotRight = booleanArrayOf(true, false, false, true, true, false, true)
+            val wide = intArrayOf(1, 4)
+            val half = (w - 2 * m) / 2f - 2f * u
+            val beside = (cx - s / 2f + 0.12f * s) - m
+            val across = (cx + 0.10f * s) - m
+            fun cap(slot: Int) = when (slotRow[slot]) { 2 -> beside; 1, 3 -> across; else -> half }
+            val ms = 7.4f * u
+            val mv = Fonts.axes(wght = 400, wdth = 100)
+            val meanings = day.meanings.take(7).toMutableList()
+            fun nat(t: String) = measureText(t, ms, tf, 0f, mv)
+            // long meanings swap into the wide slots
+            val isLong = { i: Int -> i !in wide && nat(meanings[i]) * 0.78f > cap(i) }
+            val longs = meanings.indices.filter(isLong).sortedByDescending { nat(meanings[it]) }
+            val free = wide.filter { it < meanings.size }.toMutableList()
+            for (i in longs) {
+                val j = free.firstOrNull { nat(meanings[it]) < nat(meanings[i]) } ?: continue
+                free.remove(j)
+                val t = meanings[i]; meanings[i] = meanings[j]; meanings[j] = t
             }
-            rightM.forEachIndexed { i, t ->
-                val y = 0.34f * h + i * 0.11f * h
-                val (sz, fv) = fitByAxis(t, w - 0.685f * w - pad, ms, tf, wght = 400, wdthMax = 100)
-                label(t, 0.685f * w, y, sz, p.accent, tf, fvar = fv)
+            val tc = Canvas(textLayer)
+            meanings.forEachIndexed { i, t ->
+                val (size, fv) = fitByAxis(t, cap(i), ms, tf, wght = 400, wdthMax = 100)
+                if (slotRight[i]) tc.inkLabel(t, w - m, rowY[slotRow[i]] * h, size, p.accent, tf, Paint.Align.RIGHT, fvar = fv)
+                else tc.inkLabel(t, m, rowY[slotRow[i]] * h, size, p.accent, tf, fvar = fv)
             }
+            Canvas(glyphLayer).drawBitmap(textLayer, 0f, 0f, Paint().also {
+                it.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.XOR)
+            })
+            drawBitmap(glyphLayer, 0f, 0f, null)
+            glyphLayer.recycle(); textLayer.recycle()
 
-            // readings: wrap onto a second line at full size instead of shrinking
-            val lineY = 0.70f * h
-            val colW = 0.43f * w
-            val x1 = pad
-            val x2 = w - pad - colW
+            // readings: two columns that share the margin and the centre axis, wrapping instead of shrinking
+            val gut = 5f * u
+            val colW = (w - 2 * m - gut) / 2f
+            val x1 = m
+            val x2 = m + colW + gut
+            val lineY = 0.715f * h
             hairline(x1, lineY, x1 + colW, lineY, p.faint, 0.35f * u)
             hairline(x2, lineY, x2 + colW, lineY, p.faint, 0.35f * u)
-            val ls = 4.2f * u
-            label("ON’YOMI", x1, lineY + 1.4f * u + ls, ls, p.muted, Fonts.MONO, tracking = 0.04f)
-            label("KUN’YOMI", x2, lineY + 1.4f * u + ls, ls, p.muted, Fonts.MONO, tracking = 0.04f)
-            val rs = 5.7f * u
-            val ry = lineY + 13.8f * u
+            val ls = 3.8f * u
+            inkLabel("ON’YOMI", x1, lineY + 1.4f * u + ls, ls, p.muted, mono, tracking = 0.06f, fvar = Fonts.monoW(450))
+            inkLabel("KUN’YOMI", x2, lineY + 1.4f * u + ls, ls, p.muted, mono, tracking = 0.06f, fvar = Fonts.monoW(450))
+            val rs = 6.2f * u
+            val ry = lineY + 13.4f * u
             for ((x, list) in listOf(x1 to day.on, x2 to day.kun)) {
-                val wr = wrapFit(list.take(4).joinToString("、").ifEmpty { "—" }, colW, 2, rs, tf)
-                wr.lines.forEachIndexed { i, l -> label(l, x, ry + i * wr.size * 1.18f, wr.size, p.accent, tf, fvar = wr.fvar) }
+                val f = fitLines(list.take(4).joinToString("、").ifEmpty { "—" }, colW, 2, rs, tf)
+                f.lines.forEachIndexed { i, l -> inkLabel(l, x, ry + i * f.size * 1.2f, f.size, p.accent, tf, fvar = f.fvar) }
             }
         }
 
