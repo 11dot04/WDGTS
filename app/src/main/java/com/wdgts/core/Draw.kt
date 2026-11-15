@@ -58,6 +58,9 @@ object Fonts {
     private val system: Typeface by lazy { Typeface.create(Typeface.create("sans-serif", Typeface.NORMAL), 450, false) }
     private var flexLoaded = false
 
+    /** Added to every widget label's letter spacing (em): a touch tighter than the font's own. Japanese text is left alone. */
+    const val TRACK_BIAS = -0.015f
+
     /** The widgets' face: the system sans when the setting asks for it, otherwise Google Sans Flex. */
     fun display(c: Context): Typeface = if (Prefs.systemFont(c)) { fvar = null; system } else flex(c)
 
@@ -88,7 +91,7 @@ private fun isJapanese(s: String) = s.any { it.code >= 0x3040 }
 
 private fun paintFor(
     s: String, size: Float, color: Int, tf: Typeface, align: Paint.Align, tracking: Float, fvar: String?,
-) = textPaint(size, color, tf, align, tracking, fvar).also {
+) = textPaint(size, color, tf, align, if (isJapanese(s)) tracking else tracking + Fonts.TRACK_BIAS, fvar).also {
     if (isJapanese(s)) it.textLocale = Locale.JAPAN   // pick Japanese glyph forms, not Chinese
 }
 
