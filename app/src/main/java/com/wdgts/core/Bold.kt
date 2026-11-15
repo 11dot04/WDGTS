@@ -159,3 +159,40 @@ fun Canvas.stripeWedge(x0: Float, y0: Float, x1: Float, y1: Float, color: Int, p
     }
     restore()
 }
+
+/**
+ * [label] with optical margin alignment: the ink, not the advance box, lands on [x]. Brackets and CJK glyphs carry
+ * side bearing, so a plain left-aligned "[1]" sits a few pixels in from the word under it. Returns the ink width.
+ */
+fun Canvas.inkLabel(
+    s: String, x: Float, y: Float, size: Float, color: Int, tf: Typeface,
+    align: Paint.Align = Paint.Align.LEFT, tracking: Float = 0f, fvar: String? = null,
+): Float {
+    val r = Rect()
+    textPaint(size, color, tf, Paint.Align.LEFT, tracking, fvar).getTextBounds(s, 0, s.length, r)
+    val ox = when (align) {
+        Paint.Align.LEFT -> x - r.left
+        Paint.Align.RIGHT -> x - r.right
+        else -> x - (r.left + r.right) / 2f
+    }
+    label(s, ox, y, size, color, tf, Paint.Align.LEFT, tracking, fvar)
+    return r.width().toFloat()
+}
+
+class Fit(val lines: List<String>, val size: Float, val fvar: String)
+
+/**
+ * [wrapFit] with two last resorts, so text can never leave its column: a single unbreakable word that is still too
+ * wide shrinks the size to fit, and lines beyond [maxLines] are cut with an ellipsis.
+ */
+fun fitLines(
+    text: String, maxW: Float, maxLines: Int, size: Float, tf: Typeface,
+    wght: Int = 420, minWdth: Int = 70, maxWdth: Int = 100,
+): Fit {
+    val wf = wrapFit(text, maxW, maxLines, size, tf, wght, minWdth, maxWdth)
+    val widest = wf.lines.maxOfOrNull { measureText(it, wf.size, tf, 0f, wf.fvar) } ?: 0f
+    val s = if (widest > maxW) wf.size * maxW / widest else wf.size
+    val lines = wf.lines.take(maxLines).toMutableList()
+    if (wf.lines.size > maxLines && lines.isNotEmpty()) lines[lines.lastIndex] = lines.last().trimEnd() + "…"
+    return Fit(lines, s, wf.fvar)
+}
