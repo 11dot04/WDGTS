@@ -305,7 +305,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
             line += Text(txt(sub, hide))
         }
         if (comps.isNotEmpty()) {
-            if (line.isNotEmpty()) line += Space
+            // no extra Space token: the normal gap is enough, and the saved 5 units are what let "[icon] 169 DAYS" stay on the line
             for ((slot, text, ctap) in comps) {
                 if (!hide && SmartspacerIcons.has(tid, card + slot)) line += IconPill(SsIconKey(tid, card + slot), ctap)
                 line += OutlinePill(txt(text, hide), ctap)
