@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -36,6 +37,9 @@ android {
         getByName("debug") { signingConfig = signingConfigs.getByName("wdgts") }
         getByName("release") { signingConfig = signingConfigs.getByName("wdgts") }
     }
+    buildFeatures {
+        compose = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -51,8 +55,17 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")   // PathParser for KanjiVG stroke paths
-    // MaterialShapes (M3 Expressive) + RoundedPolygon.toPath(). Bump to the newest 1.5.x if this alpha is gone.
-    implementation("androidx.compose.material3:material3:1.5.0-alpha26")
+    // In-app UI (com.wdgts.ui): the same Compose versions as microtag and B-72.
+    val compose = "1.13.0-beta02"
+    implementation("androidx.activity:activity-compose:1.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
+    implementation("androidx.compose.ui:ui:$compose")
+    implementation("androidx.compose.ui:ui-graphics:$compose")
+    implementation("androidx.compose.foundation:foundation:$compose")
+    implementation("androidx.compose.animation:animation:$compose")
+    // MaterialShapes (M3 Expressive), motion schemes and dynamic colour. Also gives RoundedPolygon.toPath().
+    implementation("androidx.compose.material3:material3:1.5.0-beta02")
+    implementation("androidx.graphics:graphics-shapes:1.1.0")
     // Real M3 Expressive wavy progress indicators (Views), drawn offscreen onto widget bitmaps.
     // Dynamic on purpose: pin the newest 1.14.x/1.15 you see on Maven once it builds.
     implementation("com.google.android.material:material:1.14.+")
