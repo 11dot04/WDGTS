@@ -35,6 +35,17 @@ object M3Shapes {
         )
     }
 
+    /** The shapes that stay close to a circle (shallow lobes, no deep notches): for round widgets. */
+    val roundish: List<RoundedPolygon> by lazy {
+        listOf(
+            MaterialShapes.Cookie9Sided, MaterialShapes.Cookie12Sided, MaterialShapes.Sunny, MaterialShapes.VerySunny,
+            MaterialShapes.SoftBurst, MaterialShapes.Cookie6Sided,
+        )
+    }
+
+    fun pickRound(seed: Long): RoundedPolygon =
+        roundish[Math.floorMod(seed xor (seed ushr 17), roundish.size.toLong()).toInt()]
+
     /** Stable "random": the same seed always gives the same shape. */
     fun pick(seed: Long): RoundedPolygon =
         pool[Math.floorMod(seed xor (seed ushr 17), pool.size.toLong()).toInt()]
