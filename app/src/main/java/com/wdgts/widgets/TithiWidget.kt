@@ -62,6 +62,13 @@ class TithiWidget : AppWidgetProvider() {
             m.getAppWidgetIds(ComponentName(c, TithiWidget::class.java)).forEach { render(c, m, it) }
         }
 
+        /** The picture for the in-app preview: today's tithi, no spoiler offset. Same drawing as the widget. */
+        fun preview(c: Context, w: Int, h: Int): android.graphics.Bitmap {
+            val zone = ZoneId.systemDefault()
+            val d = Panchang.compute(LocalDate.now(zone), zone, Prefs.lat(c), Prefs.lon(c), Prefs.purnimanta(c))
+            return Render.bitmap(w, h) { drawTithi(c, w, h, d, 0, zone) }
+        }
+
         private fun render(c: Context, m: AppWidgetManager, id: Int) {
             val (w, h) = Render.sizePx(c, m, id, 160, 160)
             val zone = ZoneId.systemDefault()

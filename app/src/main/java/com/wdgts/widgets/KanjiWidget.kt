@@ -71,6 +71,12 @@ class KanjiWidget : AppWidgetProvider() {
             m.getAppWidgetIds(ComponentName(c, KanjiWidget::class.java)).forEach { render(c, m, it) }
         }
 
+        /** The picture for the in-app preview. Same drawing as the widget. */
+        fun preview(c: Context, w: Int, h: Int): android.graphics.Bitmap {
+            val day = KanjiRepo.cached(c)
+            return Render.bitmap(w, h) { drawKanji(c, w, h, day) }
+        }
+
         private fun render(c: Context, m: AppWidgetManager, id: Int) {
             val (w, h) = Render.sizePx(c, m, id, 170, 170)
             val day = KanjiRepo.cached(c)

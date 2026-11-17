@@ -28,6 +28,9 @@ abstract class ImageWidget(private val defDp: Int = 170) : AppWidgetProvider() {
         m.getAppWidgetIds(ComponentName(c, this::class.java)).forEach { render(c, m, it) }
     }
 
+    /** The widget's picture at a given size, for the previews inside the app. Same drawing code as the real widget. */
+    fun preview(c: Context, w: Int, h: Int): android.graphics.Bitmap = Render.bitmap(w, h) { paint(c, w, h) }
+
     private fun render(c: Context, m: AppWidgetManager, id: Int) {
         val (w, h) = Render.sizePx(c, m, id, defDp, defDp)
         val bmp = Render.bitmap(w, h) { paint(c, w, h) }

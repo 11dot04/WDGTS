@@ -61,6 +61,12 @@ class StreaksWidget : AppWidgetProvider() {
             m.getAppWidgetIds(ComponentName(c, StreaksWidget::class.java)).forEach { render(c, m, it) }
         }
 
+        /** The picture for the in-app preview. Same drawing as the widget. */
+        fun preview(c: Context, w: Int, h: Int): android.graphics.Bitmap {
+            val today = LocalDate.now().toEpochDay()
+            return Render.bitmap(w, h) { drawStreaks(c, w, h, today) }
+        }
+
         private fun render(c: Context, m: AppWidgetManager, id: Int) {
             val (w, h) = Render.sizePx(c, m, id, 200, 200)
             val today = LocalDate.now().toEpochDay()
