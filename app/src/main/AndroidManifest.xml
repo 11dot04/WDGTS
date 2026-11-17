@@ -30,11 +30,12 @@
 
     <application
         android:label="WDGTS"
-        android:allowBackup="true">
+        android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true">
 
         <activity android:name=".SettingsActivity" android:exported="true"
             android:label="WDGTS"
-            android:theme="@android:style/Theme.DeviceDefault.DayNight">
+            android:theme="@style/WdgtsActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
