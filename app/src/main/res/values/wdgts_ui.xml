@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only visible for the instant before Compose draws its first frame -->
+    <color name="wdgts_paper">#F3F1EA</color>
+    <style name="WdgtsActivity" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/wdgts_paper</item>
+    </style>
+</resources>
