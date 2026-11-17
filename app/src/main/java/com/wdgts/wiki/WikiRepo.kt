@@ -42,10 +42,11 @@ object WikiRepo {
     fun cached(c: Context): Story? = Prefs.raw(c).getString(KEY, null)?.let { Story.fromJson(it) }
 
     private fun imageFile(c: Context) = File(c.filesDir, "wiki_img.jpg")
+    private fun stagedFile(c: Context) = File(c.filesDir, "wiki_next.jpg")
 
     /** The lead image, decoded to at most ~1100 px on the long side. Safe on the main thread (small file). */
-    fun image(c: Context): Bitmap? {
-        val f = imageFile(c)
+    fun image(c: Context, staged: Boolean = false): Bitmap? {
+        val f = if (staged) stagedFile(c) else imageFile(c)
         if (!f.exists()) return null
         val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(f.path, o)
@@ -65,34 +66,47 @@ object WikiRepo {
         s.imageUrl != null && !cutoutFile(c, s).exists() && !noneFile(c, s).exists()
 
     /** Slow (model download on first use): call off the main thread and outside a broadcast's budget. */
-    fun buildCutout(c: Context, s: Story) {
-        val art = image(c) ?: return
+    fun buildCutout(c: Context, s: Story, staged: Boolean = false) {
+        val art = image(c, staged) ?: return
         val fg = Cutout.compute(c, art, s.key)
         if (fg == null) runCatching { noneFile(c, s).createNewFile() }
     }
 
-    /** Blocking: today's article, or a fresh random one when [reroll]. Keeps the last one when offline. */
-    fun ensure(c: Context, reroll: Boolean = false): Story? {
+    /** A fetched article that is not on the widget yet: its image waits in a staging file until the cutout is ready. */
+    class Next(val story: Story, val staged: Boolean)
+
+    /**
+     * Blocking: today's article, or a fresh random one when [reroll]. Nothing is published here; the caller builds
+     * the cutout first (so the card never redraws its layout) and then calls [commit]. Null when offline.
+     */
+    fun fetch(c: Context, reroll: Boolean = false): Next? {
         val today = LocalDate.now().toString()
         val cur = cached(c)
-        if (!reroll && cur != null && cur.date == today) return cur
+        if (!reroll && cur != null && cur.date == today) return Next(cur, false)
 
         val rnd = if (reroll) Random() else Random(LocalDate.now().toEpochDay())
         val prefix = "" + ('A' + rnd.nextInt(26)) + ('a' + rnd.nextInt(26))
         val titles = (members(prefix).ifEmpty { members(null) }).shuffled(rnd).filter { it != cur?.title }
-        var fallback: Story? = null
+        var pick: Story? = null
         for (t in titles.take(8)) {
             val s = details(t, today) ?: continue
             if (s.extract.length < 250) continue
-            if (s.imageUrl != null) { fallback = s; break }
-            if (fallback == null) fallback = s
+            if (s.imageUrl != null) { pick = s; break }
+            if (pick == null) pick = s
         }
-        val pick = fallback ?: return cur
-        val bytes = pick.imageUrl?.let { Http.getBytes(it, 12000) }
-        if (bytes != null) imageFile(c).writeBytes(bytes) else imageFile(c).delete()
-        val story = if (bytes == null) pick.copy(imageUrl = null) else pick
-        Prefs.raw(c).edit().putString(KEY, story.toJson()).apply()
-        return story
+        val story = pick ?: return cur?.let { Next(it, false) }
+        val bytes = story.imageUrl?.let { Http.getBytes(it, 12000) }
+        if (bytes != null) stagedFile(c).writeBytes(bytes) else stagedFile(c).delete()
+        return Next(if (bytes == null) story.copy(imageUrl = null) else story, bytes != null)
+    }
+
+    /** Puts a fetched article (and its staged image) on the widget. */
+    fun commit(c: Context, n: Next) {
+        if (n.staged) {
+            val st = stagedFile(c)
+            if (st.exists()) { imageFile(c).delete(); st.renameTo(imageFile(c)) }
+        } else if (n.story.imageUrl == null) imageFile(c).delete()
+        Prefs.raw(c).edit().putString(KEY, n.story.toJson()).apply()
     }
 
     private fun members(prefix: String?): List<String> {
