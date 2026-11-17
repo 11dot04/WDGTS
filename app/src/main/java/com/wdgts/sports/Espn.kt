@@ -137,6 +137,7 @@ object Espn {
                 e.optString("id"), league, state, ms,
                 name(home), name(away), abbr(home), abbr(away), score(home), score(away), clock,
                 logo(home), logo(away), home.optJSONObject("team")?.optString("id") == teamId,
+                comp.optJSONObject("venue")?.optString("fullName").orEmpty(),
             )
         }
         out

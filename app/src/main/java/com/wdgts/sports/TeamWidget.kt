@@ -116,21 +116,34 @@ class TeamWidget : ImageWidget() {
             silhouette(it, w - 0.55f * s, h - 0.70f * s, s, mix(b.paper, b.ink, 0.13f))
         }
 
-        // band: tag left, competition right
-        val bandH = 0.26f * h
-        flat(0f, 0f, w.toFloat(), bandH, b.block)
-        flat(0f, bandH, w.toFloat(), bandH + 1.1f * u, b.ink)
+        // header, straight on the ground: "NEXT · AWAY", a rule running out to the competition on the right, and the
+        // stadium on the line below, flush with the start of AWAY (not with the margin)
         val ts = 5f * u
         val tag = if (m.teamIsHome) Prefs.homeTag(ctx) else "AWAY"
-        val ty = bandH / 2f + 0.36f * ts
-        label("NEXT · $tag", pad, ty, ts, b.onBlock, mono, tracking = 0.06f, fvar = Fonts.monoW(650))
-        label(leagueTag(m.league), w - pad, ty, ts, b.onBlock, mono, Paint.Align.RIGHT, 0.06f, Fonts.monoW(650))
+        val ty = pad + 0.72f * ts
+        val hv = Fonts.monoW(650)
+        val lead = "NEXT · "
+        label(lead + tag, pad, ty, ts, b.ink, mono, tracking = 0.06f, fvar = hv)
+        val league = leagueTag(m.league)
+        val leagueW = measureText(league, ts, mono, 0.06f, hv)
+        label(league, w - pad, ty, ts, b.ink, mono, Paint.Align.RIGHT, 0.06f, hv)
+        val tagEnd = pad + measureText(lead + tag, ts, mono, 0.06f, hv)
+        val ruleX0 = tagEnd + 2.6f * u
+        val ruleX1 = w - pad - leagueW - 2.6f * u
+        if (ruleX1 > ruleX0 + 4f * u) flat(ruleX0, ty - 0.36f * ts - 0.4f * u, ruleX1, ty - 0.36f * ts + 0.4f * u, b.ink)
+        val maxW = w - 2 * pad
+        var top = ty
+        if (m.venue.isNotBlank()) {
+            val vs = 5f * u
+            val vx = pad + measureText(lead, ts, mono, 0.06f, hv)
+            top = ty + 1.8f * u + 0.72f * vs
+            label(ellipsize(m.venue.uppercase(), w - pad - vx, vs, mono), vx, top, vs, b.ink, mono, tracking = 0.06f, fvar = hv)
+        }
 
         // our own team, small, in front of the opponent: "ARSENAL V"
-        val maxW = w - 2 * pad
         val ours = (if (m.teamIsHome) m.homeName else m.awayName).uppercase()
         val os = 4.4f * u
-        val oy = bandH + 1.1f * u + 0.8f * pad + 0.72f * os
+        val oy = top + 1.0f * pad + 0.72f * os
         label(ellipsize("$ours V", maxW, os, mono), pad, oy, os, b.soft, mono, tracking = 0.08f, fvar = Fonts.monoW(600))
 
         // opponent: heavy caps, up to two lines, as large as the card allows
