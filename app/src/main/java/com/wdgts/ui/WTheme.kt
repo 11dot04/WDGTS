@@ -50,6 +50,9 @@ object UiPrefs {
     /** The small technical marks (ticks, spec lines, six-ray stars). */
     var micro by mutableStateOf(true); private set
 
+    /** False until the first-run intro has been finished or skipped. */
+    var onboarded by mutableStateOf(true); private set
+
     fun load(c: Context) {
         if (loaded) return
         loaded = true
@@ -59,6 +62,7 @@ object UiPrefs {
         reducedMotion = s.getBoolean("reduced_motion", false)
         haptics = s.getBoolean("haptics", true)
         micro = s.getBoolean("micro", true)
+        onboarded = s.getBoolean("onboarded", false)
     }
 
     fun setMaterialYou(c: Context, v: Boolean) { materialYou = v; sp(c).edit().putBoolean("material_you", v).apply() }
@@ -66,6 +70,7 @@ object UiPrefs {
     fun setReducedMotion(c: Context, v: Boolean) { reducedMotion = v; sp(c).edit().putBoolean("reduced_motion", v).apply() }
     fun setHaptics(c: Context, v: Boolean) { haptics = v; sp(c).edit().putBoolean("haptics", v).apply() }
     fun setMicro(c: Context, v: Boolean) { micro = v; sp(c).edit().putBoolean("micro", v).apply() }
+    fun setOnboarded(c: Context, v: Boolean) { onboarded = v; sp(c).edit().putBoolean("onboarded", v).apply() }
 }
 
 // ==========================================================

@@ -73,6 +73,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.AnnotatedString
@@ -241,13 +243,18 @@ fun SixRay(modifier: Modifier = Modifier, color: Color = LocalW.current.ink, dp:
     }
 }
 
-/** A section label: star, then mono caps. */
+/** A section label: star, mono caps, a hairline that runs out to the edge, and how many rows follow. */
 @Composable
-fun WLabel(text: String, modifier: Modifier = Modifier) {
+fun WLabel(text: String, modifier: Modifier = Modifier, count: Int? = null) {
     val p = LocalW.current
-    Row(modifier.padding(start = 4.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+    Row(
+        modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 14.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         if (UiPrefs.micro) SixRay(color = p.acidText, dp = 9.dp)
         Text(text.uppercase(), style = wMono(11, p.soft, FontWeight.Bold, 1.6f))
+        Box(Modifier.weight(1f).height(1.dp).background(p.outline))
+        if (count != null) Text(count.toString().padStart(2, '0'), style = wMono(11, p.soft, FontWeight.Medium, 1f))
     }
 }
 
@@ -295,7 +302,7 @@ fun HoursScale(hourNow: Int, modifier: Modifier = Modifier) {
 // action-pill language) floating bottom-left where the thumb is.
 // ==========================================================
 @Composable
-fun WSubFrame(onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun WSubFrame(onBack: () -> Unit, pinned: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val p = LocalW.current
     val view = LocalView.current
     var gesture by remember { mutableFloatStateOf(0f) }
@@ -329,21 +336,21 @@ fun WSubFrame(onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
             .background(p.paper),
     ) {
         val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .statusBarsPadding()
-                .padding(horizontal = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Spacer(Modifier.height(12.dp))
-            content()
-            Spacer(Modifier.height(bottom + 110.dp))
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            // The preview stays put while everything under it scrolls, so a setting and its effect are on screen together.
+            if (pinned != null) Box(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 4.dp)) { pinned() }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Spacer(Modifier.height(if (pinned != null) 8.dp else 12.dp))
+                    content()
+                    Spacer(Modifier.height(bottom + 110.dp))
+                }
+                Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(18.dp).background(Brush.verticalGradient(listOf(p.paper, Color.Transparent))))
+            }
         }
-
-        val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(top + 16.dp).background(Brush.verticalGradient(listOf(p.paper, Color.Transparent))))
         Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(bottom + 100.dp).background(Brush.verticalGradient(listOf(Color.Transparent, p.paper))))
 
         val source = remember { MutableInteractionSource() }
@@ -372,10 +379,27 @@ fun WSubFrame(onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-/** The big screen title, set wide and heavy, fitted to the width. */
+/**
+ * The big screen title. Long words are fitted by narrowing the font's width axis, step by step, and the size is only
+ * touched when even the narrowest setting is too wide: a title stays the same size on every screen.
+ */
 @Composable
 fun WTitle(text: String) {
-    FitText(text.uppercase(), wDisplay(56, wdth = 125f, spacing = -1.5f), Modifier.fillMaxWidth(), minSize = 24.sp)
+    val c = LocalContext.current
+    val measurer = rememberTextMeasurer()
+    val base = wDisplay(56, wdth = 125f, spacing = -1.5f)
+    val t = text.uppercase()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val maxW = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE
+        val steps = listOf(125f, 114f, 104f, 94f, 84f, 75f)
+        val fit = remember(t, maxW) {
+            steps.firstOrNull { w ->
+                measurer.measure(AnnotatedString(t), style = base.copy(fontFamily = WFonts.display(c, w)), softWrap = false).size.width <= maxW
+            }
+        }
+        if (fit != null) Text(t, style = base.copy(fontFamily = WFonts.display(c, fit)), softWrap = false, maxLines = 1)
+        else FitText(t, base.copy(fontFamily = WFonts.display(c, 75f)), minSize = 24.sp)
+    }
 }
 
 /** A line of mono caps under a title. */
@@ -425,7 +449,7 @@ class WItem(
 /** A labelled stack of rows that interlock like a button group. */
 @Composable
 fun WBlock(label: String, items: List<WItem>) {
-    WLabel(label)
+    WLabel(label, count = items.size)
     Column(Modifier.animateContentSizeIfMotion(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         items.forEachIndexed { i, item -> WRow(item, groupCorners(i, items.size)) }
     }
@@ -557,8 +581,9 @@ fun WButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, f
 
 // ==========================================================
 // HOME TILE
-// A square or wide tile. Its badge is a Material 3 Expressive shape that morphs into a second one while pressed,
-// carrying a short mono code. The loud tile is filled with the accent.
+// A square or wide tile. A widget's tile shows that widget live; every tile also carries a Material 3 Expressive
+// shape badge that morphs into a second shape while the tile is pressed. The loud tile is filled with the accent.
+// onClick hands back the tile's centre, so the screen it opens can grow out of it.
 // ==========================================================
 @Composable
 fun WTile(
@@ -569,7 +594,8 @@ fun WTile(
     from: RoundedPolygon,
     to: RoundedPolygon,
     loud: Boolean = false,
-    onClick: () -> Unit,
+    preview: WidgetKind? = null,
+    onClick: (Offset) -> Unit,
 ) {
     val p = LocalW.current
     val view = LocalView.current
@@ -579,22 +605,43 @@ fun WTile(
     val fill = if (loud) p.acid else p.surface
     val ink = if (loud) p.onAcid else p.ink
     val sub = if (loud) p.onAcid.copy(alpha = 0.7f) else p.soft
+    var center by remember { mutableStateOf(Offset.Zero) }
     Column(
         modifier
+            .onGloballyPositioned { center = it.boundsInRoot().center }
             .clip(PressCornerShape(30.dp, 30.dp, 30.dp, 30.dp, t))
             .background(fill)
-            .clickable(interactionSource = source, indication = null) { view.tick(); onClick() }
-            .padding(16.dp),
+            .clickable(interactionSource = source, indication = null) { view.tick(); onClick(center) }
+            .padding(14.dp),
     ) {
-        Box(
-            Modifier.size(46.dp).clip(MorphShape(morph, t)).background(if (loud) p.onAcid else p.acid),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(code, style = wMono(13, if (loud) p.acid else p.onAcid, FontWeight.Bold, 0.5f))
+        if (preview != null) {
+            Box(
+                Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                    .background(if (loud) p.onAcid.copy(alpha = 0.10f) else p.paper).padding(8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                WidgetImage(preview, Modifier.fillMaxSize(), radius = 14.dp)
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(30.dp).clip(MorphShape(morph, t)).background(if (loud) p.onAcid else p.acid),
+                    contentAlignment = Alignment.Center,
+                ) { Text(code, style = wMono(11, if (loud) p.acid else p.onAcid, FontWeight.Bold, 0.3f)) }
+                Column {
+                    Text(title.uppercase(), style = wDisplay(20, ink, wdth = 125f, spacing = -0.4f), maxLines = 1)
+                    Text(caption.uppercase(), style = wMono(10, sub, FontWeight.Medium, 1.1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        } else {
+            Box(
+                Modifier.size(46.dp).clip(MorphShape(morph, t)).background(if (loud) p.onAcid else p.acid),
+                contentAlignment = Alignment.Center,
+            ) { Text(code, style = wMono(11, if (loud) p.acid else p.onAcid, FontWeight.Bold, 0.3f)) }
+            Spacer(Modifier.weight(1f))
+            Text(title.uppercase(), style = wDisplay(24, ink, wdth = 125f, spacing = -0.5f), maxLines = 1)
+            Spacer(Modifier.height(4.dp))
+            Text(caption.uppercase(), style = wMono(10, sub, FontWeight.Medium, 1.1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Spacer(Modifier.weight(1f))
-        Text(title.uppercase(), style = wDisplay(24, ink, wdth = 125f, spacing = -0.5f), maxLines = 1)
-        Spacer(Modifier.height(4.dp))
-        Text(caption.uppercase(), style = wMono(10, sub, FontWeight.Medium, 1.2f), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

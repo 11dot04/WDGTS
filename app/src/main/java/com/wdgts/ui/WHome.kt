@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,12 +39,12 @@ import java.util.Locale
 
 // ==========================================================
 // HOME
-// Not a settings list: a poster and a grid, like microtag's dashboard. The hero is today's date numeral, set the
-// way the HUD sets it, with the hour scale under it. Each tile is one widget (or one concern) and opens its own
-// screen. Grid: 2 columns; the HUD is the wide, loud one.
+// A poster over a gallery. The poster is today's date numeral, set the way the HUD sets it, with the hour scale
+// under it. Below, every widget is a tile that shows that widget live and opens its own screen; the screen grows
+// out of the tile you tapped. "Add widgets" is the loud tile.
 // ==========================================================
 @Composable
-fun WHome(go: (Screen) -> Unit) {
+fun WHome(go: (Screen, Offset) -> Unit) {
     val p = LocalW.current
     val c = LocalContext.current
     val today = remember { LocalDate.now() }
@@ -56,6 +58,8 @@ fun WHome(go: (Screen) -> Unit) {
     val granted = (if (listenerOn) 1 else 0) + (if (calendarOn) 1 else 0)
     val daysLeft = (Prefs.cdEnd(c) - today.toEpochDay()).coerceAtLeast(0)
 
+    val tall = 214.dp
+
     Box(Modifier.fillMaxSize().background(p.paper)) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().navigationBarsPadding().padding(horizontal = 18.dp),
@@ -64,58 +68,85 @@ fun WHome(go: (Screen) -> Unit) {
             Spacer(Modifier.height(10.dp))
 
             // ---- poster
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    today.dayOfMonth.toString().padStart(2, '0'),
-                    style = wDisplay(132, p.ink, wdth = 151f, lineHeight = 116, spacing = -6f),
-                    maxLines = 1,
-                )
-                Column(Modifier.padding(bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(today.format(DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)).uppercase(), style = wMono(15, p.ink, FontWeight.Bold, 2f))
-                    Text(today.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)).uppercase(), style = wMono(11, p.soft))
-                    Text("WK ${today.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)} · $zone", style = wMono(11, p.soft))
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // the numeral gives way to the caption column on a narrow phone
+                val numeral = ((maxWidth.value - 120f) / 1.45f).coerceIn(80f, 132f).toInt()
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        today.dayOfMonth.toString().padStart(2, '0'),
+                        style = wDisplay(numeral, p.ink, wdth = 125f, lineHeight = (numeral * 0.88f).toInt(), spacing = -4f),
+                        maxLines = 1,
+                    )
+                    Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(today.format(DateTimeFormatter.ofPattern("EEE", Locale.ENGLISH)).uppercase(), style = wMono(15, p.ink, FontWeight.Bold, 2f))
+                        Text(today.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)).uppercase(), style = wMono(11, p.soft))
+                        Text("WK ${today.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR)} · $zone", style = wMono(11, p.soft))
+                    }
                 }
             }
             if (UiPrefs.micro) {
                 HoursScale(LocalTime.now().hour)
                 SpecLine("WDGTS", "v$version")
             }
-            Spacer(Modifier.height(6.dp))
 
-            // ---- grid
+            // ---- widgets
+            WLabel("Widgets", count = 8)
             WTile(
-                Modifier.fillMaxWidth().height(150.dp), "HUD", "HUD", "4×2 · the one that talks",
-                Poly.Sunny, Poly.Cookie9, loud = true,
-            ) { go(Screen.Hud) }
+                Modifier.fillMaxWidth().height(220.dp), "HU", "HUD", "5×2 · live", Poly.Sunny, Poly.Cookie9,
+                preview = Kinds.Hud,
+            ) { go(Screen.Hud, it) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WTile(
-                    Modifier.weight(1f).height(170.dp), "PN", "Panchang", "%.2f, %.2f".format(Prefs.lat(c), Prefs.lon(c)),
-                    Poly.Cookie6, Poly.Circle,
-                ) { go(Screen.Panchang) }
+                    Modifier.weight(1f).height(tall), "PN", "Panchang", "%.2f, %.2f".format(Prefs.lat(c), Prefs.lon(c)),
+                    Poly.Cookie6, Poly.Circle, preview = Kinds.Tithi,
+                ) { go(Screen.Panchang, it) }
                 WTile(
-                    Modifier.weight(1f).height(170.dp), "ST", "Streaks", "${STREAKS.size} tiles",
-                    Poly.Flower, Poly.Puffy,
-                ) { go(Screen.Streaks) }
+                    Modifier.weight(1f).height(tall), "ST", "Streaks", "${STREAKS.size} tiles",
+                    Poly.Flower, Poly.Puffy, preview = Kinds.Streaks,
+                ) { go(Screen.Streaks, it) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WTile(
-                    Modifier.weight(1f).height(170.dp), "CD", "Countdown", "$daysLeft days left",
-                    Poly.Pentagon, Poly.Cookie12,
-                ) { go(Screen.Countdown) }
+                    Modifier.weight(1f).height(tall), "CD", "Countdown", "$daysLeft days left",
+                    Poly.Pentagon, Poly.Cookie12, preview = Kinds.CountdownSwiss,
+                ) { go(Screen.Countdown, it) }
                 WTile(
-                    Modifier.weight(1f).height(170.dp), "SP", "Sports", "team ${Prefs.teamId(c)} · F1",
-                    Poly.SoftBurst, Poly.Sunny,
-                ) { go(Screen.Sports) }
+                    Modifier.weight(1f).height(tall), "SP", "Sports", "team ${Prefs.teamId(c)} · F1",
+                    Poly.SoftBurst, Poly.Sunny, preview = Kinds.Team,
+                ) { go(Screen.Sports, it) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WTile(
-                    Modifier.weight(1f).height(170.dp), "AX", "Access", "$granted/2 granted",
+                    Modifier.weight(1f).height(tall), "MU", "Music", "3 widgets",
+                    Poly.Cookie9, Poly.Flower, preview = Kinds.MusicRound,
+                ) { go(Screen.Music, it) }
+                WTile(
+                    Modifier.weight(1f).height(tall), "KJ", "Study", "kanji · N${Prefs.jlpt(c)}",
+                    Poly.Sunny, Poly.Pentagon, preview = Kinds.Kanji,
+                ) { go(Screen.Study, it) }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                WTile(
+                    Modifier.weight(1f).height(tall), "WK", "Wikipedia", "article of the day",
+                    Poly.Puffy, Poly.Cookie6, preview = Kinds.Wiki,
+                ) { go(Screen.Wiki, it) }
+                WTile(
+                    Modifier.weight(1f).height(tall), "+", "Add widgets", "${Kinds.all.size} available",
+                    Poly.Cookie12, Poly.SoftBurst, loud = true,
+                ) { go(Screen.Gallery, it) }
+            }
+
+            // ---- system
+            WLabel("System", count = 2)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                WTile(
+                    Modifier.weight(1f).height(150.dp), "AX", "Access", "$granted/2 granted",
                     Poly.Puffy, Poly.Flower,
-                ) { go(Screen.Connections) }
+                ) { go(Screen.Connections, it) }
                 WTile(
-                    Modifier.weight(1f).height(170.dp), "UI", "Look", "${UiPrefs.appearance} · ${if (UiPrefs.materialYou) "material you" else "acid"}",
+                    Modifier.weight(1f).height(150.dp), "UI", "Look", "${UiPrefs.appearance} · ${if (UiPrefs.materialYou) "material you" else "acid"}",
                     Poly.Cookie12, Poly.Cookie6,
-                ) { go(Screen.Look) }
+                ) { go(Screen.Look, it) }
             }
 
             // ---- footer
