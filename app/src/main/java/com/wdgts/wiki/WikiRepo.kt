@@ -85,16 +85,22 @@ object WikiRepo {
         if (!reroll && cur != null && cur.date == today) return Next(cur, false)
 
         val rnd = if (reroll) Random() else Random(LocalDate.now().toEpochDay())
-        val prefix = "" + ('A' + rnd.nextInt(26)) + ('a' + rnd.nextInt(26))
-        val titles = (members(prefix).ifEmpty { members(null) }).shuffled(rnd).filter { it != cur?.title }
+        // an article with a lead image, or the card is half empty: look at several batches before settling
         var pick: Story? = null
-        for (t in titles.take(8)) {
-            val s = details(t, today) ?: continue
-            if (s.extract.length < 250) continue
-            if (s.imageUrl != null) { pick = s; break }
-            if (pick == null) pick = s
+        var noImage: Story? = null
+        for (attempt in 0 until 3) {
+            val prefix = "" + ('A' + rnd.nextInt(26)) + ('a' + rnd.nextInt(26))
+            val titles = (members(prefix).ifEmpty { members(null) }).shuffled(rnd).filter { it != cur?.title }.take(14)
+            val found = detailsBatch(titles, today)
+            for (t in titles) {
+                val s = found[t] ?: continue
+                if (s.extract.length < 250) continue
+                if (s.imageUrl != null) { pick = s; break }
+                if (noImage == null) noImage = s
+            }
+            if (pick != null) break
         }
-        val story = pick ?: return cur?.let { Next(it, false) }
+        val story = pick ?: noImage ?: return cur?.let { Next(it, false) }
         val bytes = story.imageUrl?.let { Http.getBytes(it, 12000) }
         if (bytes != null) stagedFile(c).writeBytes(bytes) else stagedFile(c).delete()
         return Next(if (bytes == null) story.copy(imageUrl = null) else story, bytes != null)
@@ -118,20 +124,27 @@ object WikiRepo {
         return List(a.length()) { a.getJSONObject(it).getString("title") }
     }
 
-    private fun details(title: String, today: String): Story? {
-        val url = "$API?action=query&format=json&redirects=1&titles=${enc(title)}" +
-            "&prop=extracts|pageimages|description|info&exintro=1&explaintext=1&exchars=1300" +
-            "&piprop=thumbnail&pithumbsize=1000&inprop=url"
+    /** Up to 20 titles in one request (the API caps intro extracts at 20 a call). Keyed by title. */
+    private fun detailsBatch(titles: List<String>, today: String): Map<String, Story> {
+        if (titles.isEmpty()) return emptyMap()
+        val url = "$API?action=query&format=json&redirects=1&titles=${enc(titles.joinToString("|"))}" +
+            "&prop=extracts|pageimages|description|info&exintro=1&explaintext=1&exchars=1300&exlimit=20" +
+            "&piprop=thumbnail&pithumbsize=1000&pilimit=20&inprop=url"
         val pages = Http.get(url)?.let { runCatching { JSONObject(it).getJSONObject("query").getJSONObject("pages") }.getOrNull() }
-            ?: return null
-        val p = pages.keys().asSequence().firstOrNull()?.let { pages.getJSONObject(it) } ?: return null
-        val extract = clean(p.optString("extract"))
-        if (extract.isEmpty()) return null
-        return Story(
-            today, p.optString("title", title), p.optString("description"), extract,
-            p.optJSONObject("thumbnail")?.optString("source")?.ifEmpty { null },
-            p.optString("fullurl", "https://en.wikipedia.org/wiki/${enc(title.replace(' ', '_'))}"),
-        )
+            ?: return emptyMap()
+        val out = HashMap<String, Story>()
+        for (k in pages.keys()) {
+            val p = pages.getJSONObject(k)
+            val extract = clean(p.optString("extract"))
+            if (extract.isEmpty()) continue
+            val title = p.optString("title")
+            out[title] = Story(
+                today, title, p.optString("description"), extract,
+                p.optJSONObject("thumbnail")?.optString("source")?.ifEmpty { null },
+                p.optString("fullurl", "https://en.wikipedia.org/wiki/${enc(title.replace(' ', '_'))}"),
+            )
+        }
+        return out
     }
 
     /** One paragraph, no pronunciation or citation noise, ending on a full sentence. */
