@@ -309,7 +309,7 @@ private fun StreakCard(def: StreakDef, today: Long) {
                         Text("Reset on misses", style = wBody(16, 700))
                         Text("Off: the count simply waits for you.", style = wBody(13, 500, p.soft, 18))
                     }
-                    WSwitch(reset) { reset = it }
+                    WSwitch(reset, { reset = it })
                 }
             }
         }
