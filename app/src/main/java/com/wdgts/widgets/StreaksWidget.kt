@@ -121,6 +121,53 @@ class StreaksWidget : AppWidgetProvider() {
             return Bitmap.createBitmap(px, n, n, Bitmap.Config.ARGB_8888)
         }
 
+
+        /** The icon's own outline (adaptive: the foreground layer), as an N x N bitmap. */
+        private fun silhouette(ctx: Context, def: StreakDef, n: Int): Bitmap? = runCatching {
+            val pkg = AppResolver.resolve(ctx, def)
+            if (pkg.isEmpty()) return null
+            val ic = ctx.packageManager.getApplicationIcon(pkg)
+            val layer: Drawable = if (ic is AdaptiveIconDrawable) (ic.foreground ?: return null) else ic
+            render(layer, n)
+        }.getOrNull()
+
+        /** True for every pixel that is not reachable from the border through transparent pixels: the filled shape. */
+        private fun filled(alphaOf: IntArray, n: Int): BooleanArray {
+            val outside = BooleanArray(n * n)
+            val q = IntArray(n * n)
+            var head = 0; var tail = 0
+            fun push(i: Int) { if (!outside[i] && alphaOf[i] <= 40) { outside[i] = true; q[tail++] = i } }
+            for (x in 0 until n) { push(x); push((n - 1) * n + x) }
+            for (y in 0 until n) { push(y * n); push(y * n + n - 1) }
+            while (head < tail) {
+                val i = q[head++]; val x = i % n; val y = i / n
+                if (x > 0) push(i - 1); if (x < n - 1) push(i + 1)
+                if (y > 0) push(i - n); if (y < n - 1) push(i + n)
+            }
+            return BooleanArray(n * n) { !outside[it] }
+        }
+
+        /**
+         * The negative of a glyph: its outline filled in, with the artwork knocked out. What was the dark artwork on a
+         * light tile becomes the light body, and the gaps become the ink. Falls back to the glyph itself when the
+         * outline has nothing inside it.
+         */
+        private fun invertMask(ctx: Context, def: StreakDef, mask: Bitmap): Bitmap {
+            val n = mask.width
+            if (mask.height != n) return mask
+            val m = IntArray(n * n); mask.getPixels(m, 0, n, 0, 0, n, n)
+            val mA = IntArray(n * n) { m[it] ushr 24 }
+            val outline: BooleanArray? = silhouette(ctx, def, n)?.let { sb ->
+                val sp = IntArray(n * n); sb.getPixels(sp, 0, n, 0, 0, n, n)
+                filled(IntArray(n * n) { maxOf(sp[it] ushr 24, mA[it]) }, n)
+            }
+            // an outline that is the whole square is a badge background, not a shape: use the glyph's own outline
+            val shape: BooleanArray = if (outline == null || outline.count { it } > 0.92f * n * n) filled(mA, n) else outline
+            val out = IntArray(n * n) { if (shape[it]) ((255 - mA[it]) shl 24) or 0x00FFFFFF else 0 }
+            val res = Bitmap.createBitmap(out, n, n, Bitmap.Config.ARGB_8888)
+            return if (GlyphMask.coverage(res) < 0.02f) mask else res
+        }
+
         /** Crops to the artwork but ignores stray specks (see GlyphMask.trim), so one far pixel cannot shrink a glyph. */
         private fun cropToAlpha(b: Bitmap): Bitmap? = GlyphMask.trim(b)
 
@@ -137,6 +184,7 @@ class StreaksWidget : AppWidgetProvider() {
                         mask = if (ic is AdaptiveIconDrawable) adaptiveGlyph(ic) else extractGlyph(render(ic, 256))
                     }
                 }
+                if (def.invert) mask = mask?.let { invertMask(ctx, def, it) }
                 mask?.let { cropToAlpha(it) }
             }.getOrNull()
         }
@@ -205,20 +253,20 @@ class StreaksWidget : AppWidgetProvider() {
             }
         }
 
-        /** A small, quiet shield: filled in a translucent ink with the remaining count knocked out of it. */
-        private fun Canvas.shield(cx: Float, cy: Float, s: Float, n: Int, color: Int, mono: android.graphics.Typeface) {
-            val layer = saveLayer(cx - s * 1.4f, cy - s * 1.4f, cx + s * 1.4f, cy + s * 1.4f, null)
-            val p = Path()
-            p.moveTo(cx, cy - s); p.lineTo(cx + s * 0.85f, cy - s * 0.62f); p.lineTo(cx + s * 0.85f, cy + s * 0.1f)
-            p.quadTo(cx + s * 0.8f, cy + s * 0.72f, cx, cy + s); p.quadTo(cx - s * 0.8f, cy + s * 0.72f, cx - s * 0.85f, cy + s * 0.1f)
-            p.lineTo(cx - s * 0.85f, cy - s * 0.62f); p.close()
-            drawPath(p, Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.FILL; it.color = alpha(color, 120) })
-            val clear = Paint(Paint.ANTI_ALIAS_FLAG).also {
-                it.typeface = mono; it.textSize = s * 1.05f; it.textAlign = Paint.Align.CENTER
-                it.xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+        /**
+         * Shields as dots: one per shield held, hollow rings for the free slots up to the cap. [right] is the right end of
+         * the row; with [centred] the row is centred on [right] instead.
+         */
+        private fun Canvas.shieldDots(right: Float, cy: Float, r: Float, held: Int, cap: Int, color: Int, centred: Boolean = false) {
+            val n = cap.coerceIn(1, 6)
+            val step = r * 2.9f
+            val x0 = if (centred) right - (n - 1) * step / 2f else right - (n - 1) * step - r
+            val fill = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = color }
+            val ring = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = alpha(color, 150); it.style = Paint.Style.STROKE; it.strokeWidth = r * 0.34f }
+            for (i in 0 until n) {
+                val x = x0 + i * step
+                if (i < held) drawCircle(x, cy, r, fill) else drawCircle(x, cy, r - ring.strokeWidth / 2f, ring)
             }
-            drawText("$n", cx, cy + s * 0.36f, clear)
-            restoreToCount(layer)
         }
 
         /** Material-style shapes for the 1x1 tiles (they carry no text): a polar curve r = R (1 + a cos(k t)) fitted inside the tile. */
@@ -246,9 +294,10 @@ class StreaksWidget : AppWidgetProvider() {
             val mono = Fonts.mono(ctx)
             val u = minOf(w, h) / 100f
 
-            // the widget is transparent; only a faint scrim sits behind the tiles
+            // the widget is transparent; only a faint scrim sits behind the tiles, in the theme's own tile tone
+            // (dark in dark mode, pale in light mode) rather than a fixed black
             drawRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), 11f * u, 11f * u,
-                Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = Color.argb(95, 0, 0, 0) })
+                Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = alpha(p.tile, 175) })
 
             val inset = 7.4f * u                          // KWGT: tiles start 42 px in on a 486 px card
             val gap = 2.8f * u
@@ -278,14 +327,18 @@ class StreaksWidget : AppWidgetProvider() {
                         icon(ctx, def, rect.left + 11f * u, rect.top + 11.5f * u, 11.5f * u, ink)   // KWGT icons are 49-66 px on a 486 px card
                         val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, countSize, tf, wght = 380, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.bottom - 3.4f * u, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
-                        if (rule.cap > 0) shield(rect.right - 5.6f * u, rect.top + 6.2f * u, 3.0f * u, st.shields, ink, mono)
+                        if (rule.cap > 0) shieldDots(rect.right - 4.2f * u, rect.top + 5.6f * u, 1.25f * u, st.shields, rule.cap, ink)
                     }
                     cells == 2 -> {      // wide: icon left, count right
                         icon(ctx, def, rect.left + rect.height() * 0.52f, rect.centerY(), rect.height() * 0.64f, ink)
                         val (sz, fv) = fitByAxis(num, rect.width() * 0.62f, countSize, tf, wght = 380, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.centerY() + sz * 0.35f, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
+                        if (rule.cap > 0) shieldDots(rect.right - 4.2f * u, rect.top + 3.6f * u, 0.9f * u, st.shields, rule.cap, ink)
                     }
-                    else -> icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.62f, ink)
+                    else -> {
+                        icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.62f, ink)
+                        if (rule.cap > 0) shieldDots(rect.centerX(), rect.bottom - 3.2f * u, 0.75f * u, st.shields, rule.cap, ink, centred = true)
+                    }
                 }
             }
         }

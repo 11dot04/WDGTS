@@ -15,14 +15,16 @@ data class StreakDef(
     val pkg: String = "", val match: String = "",
     val web: Boolean = false, val url: String = "",
     val seed: Int = 0,
+    /** Draw the icon's negative: the silhouette with the artwork knocked out of it, instead of the artwork. */
+    val invert: Boolean = false,
 )
 
 val STREAKS = listOf(
-    StreakDef("duo", "Duolingo", 0, 0, 2, 2, pkg = "com.duolingo", seed = 1035),
+    StreakDef("duo", "Duolingo", 0, 0, 2, 2, pkg = "com.duolingo", seed = 1035, invert = true),
     StreakDef("brilliant", "Brilliant", 0, 2, 2, 2, pkg = "org.brilliant.android", match = "brilliant", seed = 304),
     StreakDef("globo", "Globo", 2, 0, 1, 1, match = "globo"),
     StreakDef("nyt", "NYT Games", 3, 0, 1, 1, pkg = "com.nytimes.crossword", match = "nyt games"),
-    StreakDef("lumosity", "Lumosity", 2, 1, 1, 1, pkg = "com.lumoslabs.lumosity", match = "lumosity"),
+    StreakDef("lumosity", "Lumosity", 2, 1, 1, 1, pkg = "com.lumoslabs.lumosity", match = "lumosity", invert = true),
     StreakDef("kinnu", "Kinnu", 3, 1, 1, 1, match = "kinnu"),
     StreakDef("matiks", "Matiks", 2, 2, 2, 1, match = "matiks", seed = 237),
     StreakDef("chess", "Chess.com", 2, 3, 1, 1, pkg = "com.chess", match = "chess"),

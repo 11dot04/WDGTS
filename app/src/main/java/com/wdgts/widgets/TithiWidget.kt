@@ -9,6 +9,7 @@ import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Bundle
@@ -111,10 +112,19 @@ class TithiWidget : AppWidgetProvider() {
             val month = d.month.uppercase()
             val tithi = d.tithiName.uppercase()
 
-            // the UPTO line defines the measure: width axis slides until it spans left..right exactly
-            // a "+1" (ends tomorrow) is a small superscript after the line, so the line itself is not condensed to make room for it
-            val supRoom = if (nextDay) measureText("+1", 0.42f * 11.9f * u, tf, 0f) + 1.0f * u else 0f
-            val (size, fv) = fitByAxis(endLabel, right - left - supRoom, 11.9f * u, tf, wght = 400, grow = true)   // KWGT: cap height 41 px on a 486 px card
+            // the UPTO line defines the measure: width axis slides until it spans left..right exactly.
+            // When it ends tomorrow, "AM"/"PM" shrinks and gets a solid "+ONE" sticker stacked under it, flush right:
+            // the two together are exactly as tall as the time's capitals, so the line keeps its height.
+            val full = 11.9f * u                                                       // KWGT: cap height 41 px on a 486 px card
+            val cap = Rect().also { textPaint(full, 0, tf).getTextBounds("0", 0, 1, it) }.height().toFloat() / full
+            val timeText = endLabel.substringBeforeLast(' ')                           // "UPTO 06:06"
+            val ampm = endLabel.substringAfterLast(' ')                                // "AM"
+            val ampmSize = full * 0.5f
+            val stickerSize = full * 0.3f
+            val sv = Fonts.axes(wght = 700, wdth = 100)
+            val colW = if (nextDay) maxOf(measureText(ampm, ampmSize, tf, 0f), measureText("+ONE", stickerSize, tf, 0.04f, sv) + 0.9f * stickerSize) else 0f
+            val gapCol = if (nextDay) 0.35f * full else 0f
+            val (size, fv) = fitByAxis(if (nextDay) timeText else endLabel, right - left - colW - gapCol, full, tf, wght = 400, grow = true)
             val lh = size * 1.16f                                                       // and a baseline pitch of ~67 px
             val divY = 0.80f * h
             val y4 = divY - 3.2f * u
@@ -126,10 +136,21 @@ class TithiWidget : AppWidgetProvider() {
             val (ms, mv) = if (measureText(month, size, tf, 0f, fv) > right - left)
                 fitByAxis(month, right - left, size, tf, wght = 400, wdthMax = 100) else size to fv
 
-            label(endLabel, left, y4, size, p.faint, tf, fvar = fv)
-            if (nextDay) {
-                val ss = size * 0.42f
-                label("+1", right - measureText("+1", ss, tf, 0f), y4 - size * 0.52f, ss, p.faint, tf)
+            if (!nextDay) label(endLabel, left, y4, size, p.faint, tf, fvar = fv)
+            else {
+                label(timeText, left, y4, size, p.faint, tf, fvar = fv)
+                val colRight = right
+                val colLeft = colRight - colW
+                val capTop = y4 - cap * size
+                label(ampm, colLeft, capTop + cap * ampmSize, ampmSize, p.faint, tf)
+                // the sticker fills what is left of the capital height under AM, down to the baseline
+                val gap = 0.07f * size
+                val sTop = capTop + cap * ampmSize + gap
+                val r = RectF(colLeft, sTop, colRight, y4)
+                drawRect(r, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = p.faint })
+                val tw = measureText("+ONE", stickerSize, tf, 0.04f, sv)
+                val scap = Rect().also { textPaint(stickerSize, 0, tf, fvar = sv).getTextBounds("E", 0, 1, it) }.height().toFloat()
+                label("+ONE", r.centerX() - tw / 2f, r.centerY() + scap / 2f, stickerSize, p.surface, tf, tracking = 0.04f, fvar = sv)
             }
             label(tithi, right, y3, size, p.muted, tf, Paint.Align.RIGHT, fvar = fv)
             label(month, left, y2, ms, p.accent, tf, fvar = mv)
