@@ -52,6 +52,7 @@ import com.wdgts.hud.HudSources
 import com.wdgts.hud.HudWidget
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource.Access
+import com.wdgts.music.MusicPrefs
 import com.wdgts.music.MusicWidgets
 import com.wdgts.sports.TeamWidget
 import com.wdgts.widgets.CountdownBrutalWidget
@@ -463,24 +464,37 @@ private fun SportsScreen(onBack: () -> Unit) {
 @Composable
 private fun MusicScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
     val c = LocalContext.current
-    // The widgets keep this under their own class name; a tap on the widget's corner flips it too.
-    val keys = listOf("MusicDepthWidget" to "Depth", "MusicFrameWidget" to "Frame", "MusicRoundWidget" to "Round")
-    val state = remember { keys.map { mutableStateOf(Prefs.musicControls(c, it.first)) } }
+    // Frame keeps its controls switch under its class name; a tap on the widget's corner flips it too.
+    var frameControls by remember { mutableStateOf(Prefs.musicControls(c, "MusicFrameWidget")) }
+    var lyrics by remember { mutableStateOf(MusicPrefs.lyrics(c)) }
+    var style by remember { mutableIntStateOf(MusicPrefs.buttonStyle(c)) }
+    fun refresh() { MusicWidgets.refreshAll(c.applicationContext); Preview.bump() }
 
     WSubFrame(onBack, pinned = { PreviewStage(listOf(Kinds.MusicDepth, Kinds.MusicFrame, Kinds.MusicRound)) }) {
         WTitle("Music")
         WCaption("Preview shows the idle card when nothing is playing")
         WBlock(
-            "Transport controls",
-            keys.mapIndexed { i, (key, name) ->
-                WItem("Show controls on $name", "Previous, pause and next on the widget.", state[i].value, { on ->
-                    state[i].value = on
-                    Prefs.setMusicControls(c, key, on)
-                    MusicWidgets.refreshAll(c.applicationContext)
-                    Preview.bump()
-                })
-            },
+            "Depth",
+            listOf(
+                WItem("Synced lyrics", "The line being sung, above the buttons. Looked up on LRCLIB, one request per song.", lyrics, {
+                    lyrics = it; MusicPrefs.setLyrics(c, it); refresh()
+                }),
+            ),
         )
+        WPlate("Depth buttons", "Colours taken from the cover, or frosted glass over it.") {
+            WChips(listOf("Cover colours", "Glass"), style) { style = it; MusicPrefs.setButtonStyle(c, it); refresh() }
+        }
+        WBlock(
+            "Frame",
+            listOf(
+                WItem("Show controls", "Previous, pause and next in place of the cover.", frameControls, { on ->
+                    frameControls = on
+                    Prefs.setMusicControls(c, "MusicFrameWidget", on)
+                    refresh()
+                }),
+            ),
+        )
+        WCaption("Round shows its shape frame while a song plays and the contour lines when it does not.")
         WBlock(
             "Elsewhere",
             listOf(WItem("Now playing on the HUD", "Style and button are set on the HUD screen.", onClick = { go(Screen.Hud) })),
