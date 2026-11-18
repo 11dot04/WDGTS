@@ -134,7 +134,7 @@ class WikiWidget : ImageWidget(170) {
 
         // ---- image: grey and dimmed (the scrim follows the theme, so light mode stays light)
         if (art != null && place != null) {
-            with(SubjectFit) { drawPlaced(art, place, w, h, true, 9f * u) }
+            with(SubjectFit) { drawPlaced(art, place, w, h, true, 11f * u, fg) }
             drawRect(0f, 0f, w.toFloat(), h.toFloat(), Paint().also { it.color = alpha(p.surface, 165) })
         }
 
