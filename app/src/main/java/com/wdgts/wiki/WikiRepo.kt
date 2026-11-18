@@ -129,7 +129,7 @@ object WikiRepo {
         if (titles.isEmpty()) return emptyMap()
         val url = "$API?action=query&format=json&redirects=1&titles=${enc(titles.joinToString("|"))}" +
             "&prop=extracts|pageimages|description|info&exintro=1&explaintext=1&exchars=1300&exlimit=20" +
-            "&piprop=thumbnail&pithumbsize=1000&pilimit=20&inprop=url"
+            "&piprop=thumbnail&pithumbsize=1000&pilimit=20&pilicense=any&inprop=url"
         val pages = Http.get(url)?.let { runCatching { JSONObject(it).getJSONObject("query").getJSONObject("pages") }.getOrNull() }
             ?: return emptyMap()
         val out = HashMap<String, Story>()
