@@ -92,9 +92,21 @@ object KanjiRepo {
             val ms = w.getJSONArray("meanings")
             if (ms.length() == 0) continue
             val gl = ms.getJSONObject(0).getJSONArray("glosses")
-            val gloss = (0 until minOf(2, gl.length())).joinToString(", ") { gl.getString(it) }
-            out += score to Example(best.getString("written"), best.getString("pronounced"), gloss.take(32))
+            val gloss = glossLine((0 until gl.length()).map { gl.getString(it) })
+            out += score to Example(best.getString("written"), best.getString("pronounced"), gloss)
         }
         out.sortedByDescending { it.first }.map { it.second }.distinctBy { it.written }.take(10)
     }.getOrDefault(emptyList())
+
+    /** Up to two senses, kept whole: a second one that would push the line past [max] characters is dropped, and a first one that is too long is cut at a word, never mid-word. */
+    private fun glossLine(all: List<String>, max: Int = 46): String {
+        val senses = all.map { it.replace(Regex("\\s*\\(.*?\\)"), "").trim() }.filter { it.isNotEmpty() }.ifEmpty { all }
+        if (senses.isEmpty()) return ""
+        val two = senses.take(2).joinToString(", ")
+        if (two.length <= max) return two
+        val one = senses.first()
+        if (one.length <= max) return one
+        val cut = one.take(max).substringBeforeLast(' ', one.take(max))
+        return cut.trimEnd(',', ' ', ';')
+    }
 }
