@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Duolingo tile glyph: a plain owl with the eyes and beak knocked out of its body (the "inverted" look).
+     Drop in a different vector with this name to change it. Even-odd fill: eye rings cut, pupils fill back. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp" android:height="100dp"
+    android:viewportWidth="100" android:viewportHeight="100">
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M12 34 C12 24 18 16 28 14 L36 24 C44 21 56 21 64 24 L72 14 C82 16 88 24 88 34 L88 62 C88 82 72 92 50 92 C28 92 12 82 12 62 Z
+            M19 46 a15 15 0 1 0 30 0 a15 15 0 1 0 -30 0 Z
+            M51 46 a15 15 0 1 0 30 0 a15 15 0 1 0 -30 0 Z
+            M30 48 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0 Z
+            M58 48 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0 Z
+            M44 62 L56 62 L50 72 Z" />
+</vector>
