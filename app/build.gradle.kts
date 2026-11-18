@@ -66,6 +66,8 @@ dependencies {
     // MaterialShapes (M3 Expressive), motion schemes and dynamic colour. Also gives RoundedPolygon.toPath().
     implementation("androidx.compose.material3:material3:1.5.0-beta02")
     implementation("androidx.graphics:graphics-shapes:1.1.0")
+    // Icons for the home tiles (same artifact and version as B-72). R8 drops the ones that are not used.
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
     // Real M3 Expressive wavy progress indicators (Views), drawn offscreen onto widget bitmaps.
     // Dynamic on purpose: pin the newest 1.14.x/1.15 you see on Maven once it builds.
     implementation("com.google.android.material:material:1.14.+")
