@@ -4,7 +4,15 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.appwidget.AppWidgetManager
 import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.LinearGradient
+import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Shader
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
@@ -18,6 +26,10 @@ import com.wdgts.widgets.ImageWidget
 import kotlin.math.ceil
 
 object MusicWidgets {
+    /** True when a Depth widget is on a home screen (the lyric line then wants a faster refresh). */
+    fun depthPlaced(c: Context): Boolean =
+        AppWidgetManager.getInstance(c).getAppWidgetIds(ComponentName(c, MusicDepthWidget::class.java)).isNotEmpty()
+
     fun refreshAll(c: Context) {
         MusicDepthWidget().refreshAll(c)
         MusicFrameWidget().refreshAll(c)
@@ -109,127 +121,313 @@ abstract class MusicBase : ImageWidget() {
     }
 }
 
+
 // ============================================================================================
-// 1. DEPTH: the cover full-bleed, the title anchored to the top, the cut-out of the subject on a layer
-//    above the title (the iPhone depth-wallpaper look), and a "well" at the bottom with the controls
+// 1. DEPTH: the cover full-bleed, the title anchored to the top and flowed around the subject, the cut-out of the
+//    subject on a layer above the type (the iPhone depth-wallpaper look), one line of synced lyrics and the buttons
+//    along the bottom: previous / next on the left half (two discs at rest, one pill while playing), play / pause
+//    as a pill on the right.
 // ============================================================================================
+private class Placed(val text: String, val x: Float, val w: Float, val line: Int)
+private class Flowed(val runs: List<Placed>, val size: Float, val fvar: String?, val lines: Int, val splits: Int)
+private class DepthLayout(val place: SubjectFit.Place?, val flow: Flowed?, val plain: Pair<List<String>, Float>?, val cutOut: Boolean)
+
+private object DepthCache {
+    private var key = ""
+    private var value: DepthLayout? = null
+    @Synchronized fun get(k: String, make: () -> DepthLayout): DepthLayout {
+        value?.let { if (key == k) return it }
+        return make().also { key = k; value = it }
+    }
+}
+
+private fun firstBase(size: Float, pad: Float, u: Float) = pad + 6.4f * u + size * 0.86f
+
+/** Horizontal extent (widget pixels) of the subject between two y values, or null where the row is clear. */
+private fun rowExtent(c: SubjectFit.Place, s: SubjectFit.Subject, y0: Float, y1: Float): Pair<Float, Float>? {
+    if (y1 < c.oy || y0 > c.oy + c.dh) return null
+    val r0 = (((y0 - c.oy) / c.dh) * s.mh).toInt().coerceIn(0, s.mh - 1)
+    val r1 = (((y1 - c.oy) / c.dh) * s.mh).toInt().coerceIn(0, s.mh - 1)
+    var lo = Float.MAX_VALUE
+    var hi = -Float.MAX_VALUE
+    for (r in r0..r1) for (cx in 0 until s.mw) if (s.mask[r * s.mw + cx]) {
+        val l = c.ox + cx.toFloat() / s.mw * c.dw
+        val rr = c.ox + (cx + 1f) / s.mw * c.dw
+        if (l < lo) lo = l
+        if (rr > hi) hi = rr
+    }
+    return if (hi < lo) null else lo to hi
+}
+
+/**
+ * Sets the words line by line and routes them around the subject: on a row the subject crosses, the words that
+ * fit go to the left of it and the rest to the right (flush with the margins), so the cut-out sits in a gap in the
+ * line rather than on top of a word. Returns null when a word cannot fit at this size or the block runs too low.
+ */
+private fun flow(
+    words: List<String>, size: Float, fvar: String?, fp: MusicFonts.Pick, place: SubjectFit.Place, subj: SubjectFit.Subject,
+    w: Int, pad: Float, u: Float, maxBase: Float, memo: HashMap<String, Float>,
+): Flowed? {
+    fun ww(s: String) = memo.getOrPut("$s|$size|$fvar") { measureText(s, size, fp.tf, 0f, fvar) }
+    val space = ww(" ").let { if (it > 0.05f) it else size * 0.26f }
+    val x0 = pad
+    val x1 = w - pad
+    val tuck = 1.0f * u                       // type may slip this far under the subject: that is the depth cue
+    val pitch = size * 0.92f
+    val runs = ArrayList<Placed>()
+    var splits = 0
+    var wi = 0
+    var line = 0
+    while (wi < words.size) {
+        val base = firstBase(size, pad, u) + line * pitch
+        if (base > maxBase || line >= 8) return null
+        var slots: List<Pair<Float, Float>> = listOf(x0 to x1)
+        var blocked = false
+        val ext = rowExtent(place, subj, base - size * 0.74f, base + size * 0.04f)
+        if (ext != null) {
+            val bl = ext.first + tuck
+            val br = ext.second - tuck
+            if (br > bl) {
+                blocked = true
+                val l = x0 to minOf(x1, bl - space * 0.6f)
+                val r = maxOf(x0, br + space * 0.6f) to x1
+                slots = listOfNotNull(l.takeIf { it.second - it.first > 0f }, r.takeIf { it.second - it.first > 0f })
+            }
+        }
+        var placed = 0
+        for (sl in slots) {
+            val avail = sl.second - sl.first
+            var used = 0f
+            val start = wi
+            while (wi < words.size) {
+                val wd = ww(words[wi])
+                val add = if (wi == start) wd else space + wd
+                if (used + add > avail) break
+                used += add
+                wi++
+            }
+            if (wi > start) {
+                val x = if (sl.first > x0 + 0.5f) sl.second - used else sl.first
+                runs += Placed(words.subList(start, wi).joinToString(" "), x, used, line)
+                placed++
+            }
+        }
+        if (placed > 1) splits++
+        if (placed == 0 && !blocked) return null          // a word wider than the whole line
+        line++
+    }
+    return Flowed(runs, size, fvar, line, splits)
+}
+
+private fun narrowed(f: String): String {
+    val lo = if (f.contains("'XOPQ'")) 40 else 75
+    return Regex("'wdth' (-?\\d+)").replace(f) { "'wdth' ${(it.groupValues[1].toInt() * 0.8f).toInt().coerceAtLeast(lo)}" }
+}
+
+private fun solveDepth(art: Bitmap?, fg: Bitmap?, title: String, fp: MusicFonts.Pick, w: Int, h: Int, pad: Float, u: Float, maxBase: Float): DepthLayout {
+    val plainH = (minOf(0.40f * h, maxBase - (pad + 6.4f * u))).coerceAtLeast(0.12f * h)
+    val plain = layoutTitle(title, fp, w - 2 * pad, plainH)
+    if (art == null) return DepthLayout(null, null, plain, false)
+    val cands = SubjectFit.places(art.width, art.height, w, h)
+    val subj = fg?.let { SubjectFit.subjectOf(it) }
+    if (subj == null) {
+        val mid = cands.first { it.kf == 1f && Math.abs(it.ox - (w - it.dw) / 2f) < 1f && Math.abs(it.oy - (h - it.dh) / 2f) < 1f }
+        return DepthLayout(mid, null, plain, false)
+    }
+
+    val words = title.split(" ").filter { it.isNotBlank() }.ifEmpty { listOf(title) }
+    val memo = HashMap<String, Float>()
+    val longest = words.maxOf { measureText(it, 100f, fp.tf, 0f, fp.fvar) }
+    val sMax = minOf(0.30f * h, 100f * (w - 2 * pad) / longest)
+    val variants = ArrayList<String?>().apply { add(fp.fvar); fp.fvar?.let { if (it.contains("'wdth'")) add(narrowed(it)) } }
+
+    var best = 99f
+    var bestPlace: SubjectFit.Place? = null
+    var bestFlow: Flowed? = null
+    for (c in cands) {
+        if (SubjectFit.outside(c, subj, w, h) >= 0.02f) continue
+        val base = SubjectFit.cost(c, subj, w, h)
+        if (base >= best) continue
+        for ((vi, v) in variants.withIndex()) {
+            var size = sMax
+            for (i in 0 until 12) {
+                if (size < 0.045f * h) break
+                val f = flow(words, size, v, fp, c, subj, w, pad, u, maxBase, memo)
+                if (f != null) {
+                    val rects = f.runs.map {
+                        val by = firstBase(size, pad, u) + it.line * size * 0.92f
+                        RectF(it.x, by - size * 0.70f, it.x + it.w, by)
+                    }
+                    val ov = SubjectFit.covered(c, subj, rects)
+                    if (ov <= 0.10f) {
+                        val sc = base + (1f - size / sMax) * 0.9f + f.splits * 0.02f + ov + (if (vi > 0) 0.03f else 0f) +
+                            (f.lines - 3).coerceAtLeast(0) * 0.05f
+                        if (sc < best) { best = sc; bestPlace = c; bestFlow = f }
+                        break                                   // sizes run downwards: the first fit is the largest
+                    }
+                }
+                size *= 0.9f
+            }
+        }
+    }
+    val bp = bestPlace
+    val bf = bestFlow
+    return if (bp != null && bf != null) DepthLayout(bp, bf, null, true)
+    else DepthLayout(SubjectFit.centred(cands, subj, w, h), null, plain, false)
+}
+
+/** Frosted glass: the blurred cover with a light veil, cut to the given pills. */
+private fun Canvas.glass(art: Bitmap, shapes: List<RectF>, w: Int, h: Int) {
+    val bounds = RectF(0f, shapes.minOf { it.top } - 2f, w.toFloat(), shapes.maxOf { it.bottom } + 2f)
+    val sc = saveLayer(bounds, null)
+    val under = SubjectFit.underlay(art, null)
+    val kc = maxOf(w / under.width.toFloat(), h / under.height.toFloat())
+    val cw = under.width * kc
+    val ch = under.height * kc
+    drawBitmap(under, null, RectF((w - cw) / 2f, (h - ch) / 2f, (w + cw) / 2f, (h + ch) / 2f), Paint(Paint.FILTER_BITMAP_FLAG))
+    drawRect(bounds, Paint().also { it.color = Color.argb(70, 255, 255, 255) })
+    val inv = Path()
+    for (r in shapes) inv.addRoundRect(r, r.height() / 2f, r.height() / 2f, Path.Direction.CW)
+    inv.fillType = Path.FillType.INVERSE_WINDING
+    drawPath(inv, Paint(Paint.ANTI_ALIAS_FLAG).also { it.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT) })
+    restoreToCount(sc)
+    val edge = Paint(Paint.ANTI_ALIAS_FLAG).also { it.style = Paint.Style.STROKE; it.strokeWidth = 1f; it.color = Color.argb(90, 255, 255, 255) }
+    for (r in shapes) drawRoundRect(r, r.height() / 2f, r.height() / 2f, edge)
+}
+
 class MusicDepthWidget : MusicBase() {
     override val layoutRes: Int = R.layout.widget_music_depth
 
     override fun bind(ctx: Context, rv: RemoteViews) {
-        val on = controlsOn(ctx)
         rv.setOnClickPendingIntent(R.id.zone_main, broadcast(ctx, ACT_PP, 50))
-        rv.setOnClickPendingIntent(R.id.zone_toggle, broadcast(ctx, ACT_TOGGLE, 54))
+        rv.setOnClickPendingIntent(R.id.zone_prev, broadcast(ctx, ACT_PREV, 51))
+        rv.setOnClickPendingIntent(R.id.zone_next, broadcast(ctx, ACT_NEXT, 52))
         rv.setOnClickPendingIntent(R.id.zone_play, broadcast(ctx, ACT_PP, 53))
-        rv.setOnClickPendingIntent(R.id.zone_prev, broadcast(ctx, if (on) ACT_PREV else ACT_PP, 51))
-        rv.setOnClickPendingIntent(R.id.zone_next, broadcast(ctx, if (on) ACT_NEXT else ACT_PP, 52))
     }
 
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         if (!MusicState.hasSession) { idleCard(ctx, w, h); return }
+        Lyrics.ensure(ctx)
         val p = Palette.of(ctx)
         val tf = Fonts.flex(ctx)
-        val mono = Fonts.mono(ctx)
         val u = minOf(w, h) / 100f
         val art = MusicState.art
-        val on = controlsOn(ctx)
+        val playing = MusicState.playing
         val full = RectF(0f, 0f, w.toFloat(), h.toFloat())
 
-        // ink for the title comes from the cover
+        // colours from the cover: a light tint for the title, a vivid one and a deep one for the buttons
         val hsv = FloatArray(3)
         Color.colorToHSV(art?.let { Bitmap.createScaledBitmap(it, 1, 1, true).getPixel(0, 0) } ?: p.accent, hsv)
-        hsv[1] = (hsv[1] * 0.6f).coerceIn(0.12f, 0.5f); hsv[2] = 0.97f
-        val ink = Color.HSVToColor(hsv)
+        val hue = hsv[0]
+        val sat = hsv[1]
+        val ink = Color.HSVToColor(floatArrayOf(hue, (sat * 0.6f).coerceIn(0.12f, 0.5f), 0.97f))
+        val vivid = Color.HSVToColor(floatArrayOf(hue, (sat * 1.1f).coerceIn(0.35f, 0.8f), 0.98f))
+        val deep = Color.HSVToColor(floatArrayOf(hue, (sat * 0.8f).coerceIn(0.25f, 0.7f), 0.16f))
 
-        // the title, anchored to the top: random font + random axis settings per track
+        // geometry of the bottom: buttons, then the lyric line above them; the title may run down to the lyric line
         val pad = 6.5f * u
+        val rh = 0.165f * h
+        val btnTop = h - 0.05f * h - rh
+        val lyricSize = 4.6f * u
+        val lyricBase = btnTop - 3.4f * u
+        val maxBase = minOf(0.64f * h, lyricBase - lyricSize - 3f * u)
+
         val fp = MusicFonts.pick(ctx, MusicState.key)
         val title = if (fp.upper) MusicState.title.uppercase() else MusicState.title
         val fg = MusicState.cutout
-        val subj = if (art != null && fg != null) SubjectFit.subjectOf(fg) else null
-        val firstBase = { size: Float -> pad + 3.8f * u + 2.6f * u + size * 0.86f }
-        fun rects(t: Pair<List<String>, Float>): List<RectF> = t.first.mapIndexed { i, l ->
-            val lw = measureText(l, t.second, fp.tf, 0f, fp.fvar)
-            val by = firstBase(t.second) + i * t.second * 0.92f
-            RectF(pad, by - t.second * 0.70f, pad + lw, by)
-        }
-        val fullT = layoutTitle(title, fp, w - 2 * pad, 0.40f * h)
+        val ck = "${MusicState.key}|$w|$h|${System.identityHashCode(art)}|${System.identityHashCode(fg)}"
+        val lay = DepthCache.get(ck) { solveDepth(art, fg, title, fp, w, h, pad, u, maxBase) }
+        val place = lay.place
 
-        // where the cover sits, and whether its subject may come out in front of the title (a little overlap is the
-        // depth look; if the subject would swallow the title, no cut-out: the cover just stays behind the type)
-        var place: SubjectFit.Place? = null
-        var titleT = fullT
-        var cutOut = false
-        if (art != null) {
-            val cands = SubjectFit.places(art.width, art.height, w, h)
-            if (subj == null) {
-                place = cands.first { it.kf == 1f && Math.abs(it.ox - (w - it.dw) / 2f) < 1f && Math.abs(it.oy - (h - it.dh) / 2f) < 1f }
-            } else {
-                var best = 9f; var bp: SubjectFit.Place? = null; var bt = fullT; var bo = 1f
-                for (c in cands) {
-                    val base = SubjectFit.cost(c, subj, w, h)
-                    val o1 = SubjectFit.covered(c, subj, rects(fullT))
-                    if (base + o1 < best) { best = base + o1; bp = c; bt = fullT; bo = o1 }
-                    val free = c.ox + subj.x0 * c.dw - pad - 2f * u
-                    if (free > 0.42f * (w - 2 * pad) && free < w - 2 * pad) {
-                        val nt = layoutTitle(title, fp, free, 0.40f * h)
-                        val o2 = SubjectFit.covered(c, subj, rects(nt))
-                        val sc = base + o2 + (1f - nt.second / fullT.second).coerceAtLeast(0f) * 0.3f
-                        if (sc < best) { best = sc; bp = c; bt = nt; bo = o2 }
-                    }
-                }
-                if (bo <= 0.12f && SubjectFit.outside(bp!!, subj, w, h) < 0.02f) { cutOut = true; place = bp; titleT = bt }
-                else place = SubjectFit.centred(cands, subj, w, h)
-            }
-        }
-
-        // layer 1: the cover, with a soft scrim so the title reads
-        if (art != null && place != null) with(SubjectFit) { drawPlaced(art, place, w, h, false, 9f * u) } else drawColor(p.surface)
+        // layer 1: the cover (its zoomed-out margins are a blurred, subject-free copy), with a soft scrim
+        if (art != null && place != null) with(SubjectFit) { drawPlaced(art, place, w, h, false, 11f * u, fg) } else drawColor(p.surface)
         drawRect(full, Paint().also { it.color = Color.argb(64, 0, 0, 0) })
 
-        // layer 2: the title, then (when it fits) the cut-out on the SAME transform as the cover, in front of it
-        val (lines, size) = titleT
-        var y = firstBase(size)
-        for (l in lines) { label(l, pad, y, size, ink, fp.tf, fvar = fp.fvar); y += size * 0.92f }
-        if (cutOut && fg != null && place != null) drawBitmap(fg, null, place.rect, Paint(Paint.FILTER_BITMAP_FLAG))
+        // layer 2: the title, flowed around the subject
+        val fl = lay.flow
+        if (fl != null) {
+            for (r in fl.runs) label(r.text, r.x, firstBase(fl.size, pad, u) + r.line * fl.size * 0.92f, fl.size, ink, fp.tf, fvar = fl.fvar)
+        } else lay.plain?.let { (lines, size) ->
+            var y = firstBase(size, pad, u)
+            for (l in lines) { label(l, pad, y, size, ink, fp.tf, fvar = fp.fvar); y += size * 0.92f }
+        }
 
-        // layer 3: the artist line is on top of everything, so the subject never swallows it
+        // layer 3: the subject in front of the type, darkened by the same amount as the scrim so it matches the cover
+        if (lay.cutOut && fg != null && place != null) {
+            val dim = ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
+                0.75f, 0f, 0f, 0f, 0f, 0f, 0.75f, 0f, 0f, 0f, 0f, 0f, 0.75f, 0f, 0f, 0f, 0f, 0f, 1f, 0f,
+            )))
+            drawBitmap(fg, null, place.rect, Paint(Paint.FILTER_BITMAP_FLAG).also { it.colorFilter = dim })
+        }
+
+        // a gradient so the lyric line and the buttons read on any cover
+        drawRect(0f, 0.5f * h, w.toFloat(), h.toFloat(), Paint().also {
+            it.shader = LinearGradient(0f, 0.5f * h, 0f, h.toFloat(), Color.argb(0, 0, 0, 0), Color.argb(150, 0, 0, 0), Shader.TileMode.CLAMP)
+        })
+
+        // the artist line is above everything but the buttons
         val ap = Paint(textPaint(4.2f * u, alpha(ink, 235), Fonts.mono(ctx), Paint.Align.LEFT, 0.06f, null))
         ap.setShadowLayer(1.8f * u, 0f, 0f, Color.argb(170, 0, 0, 0))
         drawText(MusicState.artist.uppercase(), pad, pad + 3.8f * u, ap)
 
-        // the well
-        val wellH = if (on) 0.36f * h else 0.17f * h
-        val well = RectF(5f * u, h - 5f * u - wellH, w - 5f * u, h - 5f * u)
-        drawRoundRect(well, 7f * u, 7f * u, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = alpha(p.surface, 238) })
-        val bx = well.left + 5f * u
-        val bw = well.width() - 10f * u
-        val by = well.top + if (on) 0.27f * wellH else 0.40f * wellH
-        wavyProgress(bx, by, bw, MusicState.progress(), u, p.accent, alpha(p.faint, 170), wavePhase())
-        if (MusicState.durationMs > 0) {
-            label(clock(MusicState.positionMs()), bx, by + 6.6f * u, 3.4f * u, p.muted, mono, tracking = 0.02f)
-            label(clock(MusicState.durationMs), bx + bw, by + 6.6f * u, 3.4f * u, p.muted, mono, Paint.Align.RIGHT, 0.02f)
+        // the lyric line being sung
+        val line = if (MusicPrefs.lyrics(ctx)) Lyrics.current(MusicState.positionMs()) else null
+        if (line != null) {
+            val fv = Fonts.axes(wght = 520, wdth = 100)
+            var ls = lyricSize
+            val maxW = w - 2 * pad
+            while (ls > 3.5f * u && measureText(line, ls, tf, 0f, fv) > maxW) ls *= 0.94f
+            val shown = if (measureText(line, ls, tf, 0f, fv) > maxW) ellipsize(line, maxW, ls, tf) else line
+            val lp = Paint(textPaint(ls, alpha(ink, 245), tf, Paint.Align.LEFT, 0f, fv))
+            lp.setShadowLayer(1.6f * u, 0f, 0f, Color.argb(190, 0, 0, 0))
+            drawText(shown, pad, lyricBase, lp)
         }
-        if (on) {
-            val cy = well.bottom - 0.20f * wellH - 5.2f * u
-            val cx = well.centerX()
-            val r = 5.4f * u
-            val pill = RectF(cx - 10f * u, cy - r, cx + 10f * u, cy + r)
-            drawRoundRect(pill, r, r, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = p.accent })
-            label(if (MusicState.playing) "PAUSE" else "PLAY", cx, baselineFor(cy, 5.2f * u, tf), 5.2f * u, p.onAccent, tf,
-                Paint.Align.CENTER, 0.02f, Fonts.axes(wght = 560, wdth = 105))
-            val c1 = cx - 10f * u - 3.4f * u - r
-            val c2 = cx + 10f * u + 3.4f * u + r
-            dot(c1, cy, r, p.tertiary); skipIcon(c1, cy, r * 0.42f, p.surface, false)
-            dot(c2, cy, r, p.tertiary); skipIcon(c2, cy, r * 0.42f, p.surface, true)
+
+        // buttons: previous/next on the left half, play/pause on the right
+        val px = 0.065f * w
+        val gap = 0.03f * w
+        val left = RectF(px, btnTop, w / 2f - gap / 2f, btnTop + rh)
+        val right = RectF(w / 2f + gap / 2f, btnTop, w - px, btnTop + rh)
+        val prev: RectF
+        val next: RectF
+        if (playing) { prev = left; next = left }                  // one pill; the two icons share it
+        else {
+            prev = RectF(left.left, btnTop, left.left + rh, btnTop + rh)
+            next = RectF(left.right - rh, btnTop, left.right, btnTop + rh)
         }
-        toggleGlyph(on, w - 9.5f * u, 8f * u, u, Color.WHITE)
+        val shapes = if (playing) listOf(left, right) else listOf(prev, next, right)
+        val glassOn = MusicPrefs.buttonStyle(ctx) == 1 && art != null
+        val skipFill = ink
+        val skipInk = deep
+        val playFill = vivid
+        val playInk = deep
+        val cy = btnTop + rh / 2f
+        val ir = rh * 0.20f
+        if (glassOn && art != null) {
+            glass(art, shapes, w, h)
+        } else {
+            val fillP = Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = skipFill }
+            for (s in shapes) if (s !== right) drawRoundRect(s, rh / 2f, rh / 2f, fillP)
+            drawRoundRect(right, rh / 2f, rh / 2f, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = playFill })
+        }
+        val icon = if (glassOn) Color.WHITE else skipInk
+        val labelInk = if (glassOn) Color.WHITE else playInk
+        if (playing) {
+            skipIcon(left.left + left.width() * 0.27f, cy, ir, icon, false)
+            skipIcon(left.left + left.width() * 0.73f, cy, ir, icon, true)
+        } else {
+            skipIcon(prev.centerX(), cy, ir, icon, false)
+            skipIcon(next.centerX(), cy, ir, icon, true)
+        }
+        label(if (playing) "PAUSE" else "PLAY", right.centerX(), baselineFor(cy, 6.2f * u, tf), 6.2f * u, labelInk, tf,
+            Paint.Align.CENTER, 0.02f, Fonts.axes(wght = 580, wdth = 105))
     }
 }
 
 // ============================================================================================
 // 2. FRAME: Google's M3E player concept. Controls hidden: big cover + huge title + wavy progress.
 //    Controls shown (top-right toggle): smaller cover, PLAY pill + previous, next + wavy progress.
+//    A long title wraps onto up to three lines and the cover gives way to it.
 // ============================================================================================
 class MusicFrameWidget : MusicBase() {
     override val layoutRes: Int = R.layout.widget_music_frame
@@ -243,6 +441,14 @@ class MusicFrameWidget : MusicBase() {
         rv.setOnClickPendingIntent(R.id.zone_next, broadcast(ctx, if (on) ACT_NEXT else ACT_PP, 52))
     }
 
+    /** Draws a wrapped title centred in the band [top, bottom]. */
+    private fun Canvas.titleBlock(t: Pair<List<String>, Float>, fp: MusicFonts.Pick, cx: Float, top: Float, bottom: Float, color: Int) {
+        val (lines, size) = t
+        val content = size * 0.92f * (lines.size - 1) + size * 0.72f
+        var y = top + (bottom - top - content) / 2f + size * 0.72f
+        for (l in lines) { label(l, cx, y, size, color, fp.tf, Paint.Align.CENTER, fvar = fp.fvar); y += size * 0.92f }
+    }
+
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         if (!MusicState.hasSession) { idleCard(ctx, w, h); return }
         val p = Palette.of(ctx)
@@ -252,23 +458,31 @@ class MusicFrameWidget : MusicBase() {
         val on = controlsOn(ctx)
         drawColor(p.surface)
 
+        val fp = MusicFonts.pick(ctx, MusicState.key)
+        val title = if (fp.upper) MusicState.title.uppercase() else MusicState.title
+        val maxW = 0.90f * w
+
         // cover in a shape that changes from song to song; with the controls shown the cover steps aside so the
         // buttons can be as big as Google's player concept draws them
         val art = MusicState.art
         val poly = M3Shapes.pick(MusicState.key)
         if (!on) {
-            val cs = 0.58f * h
-            val ccy = 0.33f * h
+            // a long title takes room from the cover: try smaller covers and keep one only if the type gains clearly
+            fun avail(cs: Float) = 0.82f * h - (0.04f * h + cs) - 0.015f * h
+            var cs = 0.58f * h
+            var t = layoutTitle(title, fp, maxW, avail(cs))
+            for (c2 in floatArrayOf(0.52f * h, 0.46f * h)) {
+                val t2 = layoutTitle(title, fp, maxW, avail(c2))
+                if (t2.second > t.second * 1.18f) { t = t2; cs = c2 }
+            }
+            val ccy = 0.04f * h + cs / 2f
             if (art != null) drawShapeBitmap(poly, w / 2f, ccy, cs, art) else drawShape(poly, w / 2f, ccy, cs, p.tile)
+            titleBlock(t, fp, w / 2f, 0.04f * h + cs + 0.015f * h, 0.82f * h, p.accent)
+        } else {
+            label(ellipsize(MusicState.artist.uppercase(), 0.62f * w, 3.8f * u, mono), w / 2f, 0.135f * h, 3.8f * u, p.muted, mono,
+                Paint.Align.CENTER, 0.06f)
+            titleBlock(layoutTitle(title, fp, maxW, 0.31f * h), fp, w / 2f, 0.17f * h, 0.49f * h, p.accent)
         }
-
-        // title: random font + axes per track, as large as the card allows
-        val fp = MusicFonts.pick(ctx, MusicState.key)
-        val title = if (fp.upper) MusicState.title.uppercase() else MusicState.title
-        val ts = fitSize(listOf(title), 0.90f * w, if (on) 0.20f * h else 0.19f * h, fp.tf, 0f, fp.fvar)
-        if (on) label(ellipsize(MusicState.artist.uppercase(), 0.62f * w, 3.8f * u, mono), w / 2f, 0.135f * h, 3.8f * u, p.muted, mono,
-            Paint.Align.CENTER, 0.06f)
-        label(title, w / 2f, if (on) 0.36f * h else 0.755f * h, ts, p.accent, fp.tf, Paint.Align.CENTER, fvar = fp.fvar)
 
         val pad = 0.08f * w
         val frac = MusicState.progress()
@@ -318,9 +532,9 @@ class MusicFrameWidget : MusicBase() {
 }
 
 // ============================================================================================
-// 3. ROUND: Google's player concept, round: a dark near-round shape (a different one for each track) holding
-//    concentric contour lines, a previous/next pill on its upper right and the play disc on its lower left,
-//    both overlapping the edge. The title sits quietly in the lower right.
+// 3. ROUND: Google's player concept, round. At rest (nothing playing, or paused) a dark near-round shape holds
+//    concentric contour lines; while a track plays the same shape becomes the frame of its cover. A previous/next
+//    pill sits on its upper right and the play disc on its lower left, both overlapping the edge. No text.
 // ============================================================================================
 class MusicRoundWidget : MusicBase() {
     override val layoutRes: Int = R.layout.widget_music_round
@@ -334,8 +548,6 @@ class MusicRoundWidget : MusicBase() {
 
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
         val p = Palette.of(ctx)
-        val tf = Fonts.flex(ctx)
-        val mono = Fonts.mono(ctx)
         val side = minOf(w, h).toFloat()
         val ox = (w - side) / 2f
         val oy = (h - side) / 2f
@@ -343,47 +555,44 @@ class MusicRoundWidget : MusicBase() {
         fun fx(f: Float) = ox + f * side
         fun fy(f: Float) = oy + f * side
 
-        val blob = 0.82f * side
-        val bx = fx(0.49f)
-        val by = fy(0.51f)
+        val blob = 0.96f * side
+        val bx = fx(0.5f)
+        val by = fy(0.5f)
         val poly = if (MusicState.hasSession) M3Shapes.pickRound(MusicState.key) else M3Shapes.Cookie12
-        drawShape(poly, bx, by, blob, p.surface)
+        val art = MusicState.art
+        val framed = MusicState.hasSession && MusicState.playing && art != null
 
-        // contour lines: scaled copies of the same shape, drifting up and to the left as they shrink
-        val ring = Paint(Paint.ANTI_ALIAS_FLAG).also {
-            it.style = Paint.Style.STROKE; it.strokeWidth = 0.42f * u; it.color = alpha(p.faint, 150)
-        }
-        for (i in 0 until 7) {
-            val s = 0.90f - i * 0.105f
-            val dx = -(1f - s) * 0.34f * blob
-            val dy = -(1f - s) * 0.28f * blob
-            drawPath(shapePath(poly, bx + dx, by + dy, blob * s), ring)
-        }
-
-        if (MusicState.hasSession) {
-            // title and artist, lower right, inside the shape
-            val tx = bx + 0.34f * blob
-            val name = ellipsize(MusicState.title.uppercase(), 0.46f * blob, 3.8f * u, mono)
-            label(name, tx, by + 0.30f * blob, 3.8f * u, p.onSurface, mono, Paint.Align.RIGHT, 0.04f)
-            label(ellipsize(MusicState.artist.uppercase(), 0.46f * blob, 3.4f * u, mono), tx, by + 0.30f * blob + 5.4f * u, 3.4f * u,
-                p.muted, mono, Paint.Align.RIGHT, 0.04f)
+        if (framed && art != null) {
+            drawShapeBitmap(poly, bx, by, blob, art)
         } else {
-            label("NOTHING PLAYING", bx, by + 1.4f * u, 3.8f * u, p.muted, mono, Paint.Align.CENTER, 0.06f)
+            drawShape(poly, bx, by, blob, p.surface)
+            // contour lines: scaled copies of the same shape, drifting up and to the left as they shrink
+            val ring = Paint(Paint.ANTI_ALIAS_FLAG).also {
+                it.style = Paint.Style.STROKE; it.strokeWidth = 0.42f * u; it.color = alpha(p.faint, 150)
+            }
+            for (i in 0 until 7) {
+                val s = 0.90f - i * 0.105f
+                val dx = -(1f - s) * 0.34f * blob
+                val dy = -(1f - s) * 0.28f * blob
+                drawPath(shapePath(poly, bx + dx, by + dy, blob * s), ring)
+            }
         }
 
-        // previous / next pill, upper right, overlapping the edge
-        val pill = RectF(fx(0.49f), fy(0.15f), fx(0.85f), fy(0.32f))
+        // previous / next pill, upper right, overlapping the edge; solid over a cover, muted over the dark shape
+        val pill = RectF(fx(0.50f), fy(0.10f), fx(0.90f), fy(0.29f))
         val rr = pill.height() / 2f
-        val key = p.muted
-        drawRoundRect(pill, rr, rr, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = key })
-        skipIcon(pill.left + pill.width() * 0.27f, pill.centerY(), rr * 0.40f, p.surface, false)
-        skipIcon(pill.left + pill.width() * 0.73f, pill.centerY(), rr * 0.40f, p.surface, true)
+        val keyFill = if (framed) alpha(p.surface, 240) else p.muted
+        val keyInk = if (framed) p.onSurface else p.surface
+        drawRoundRect(pill, rr, rr, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = keyFill })
+        skipIcon(pill.left + pill.width() * 0.27f, pill.centerY(), rr * 0.40f, keyInk, false)
+        skipIcon(pill.left + pill.width() * 0.73f, pill.centerY(), rr * 0.40f, keyInk, true)
 
         // play disc, lower left
-        val pr = 0.13f * side
-        val pc = fx(0.26f)
-        val pcy = fy(0.73f)
-        drawCircle(pc, pcy, pr, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = key })
-        if (MusicState.playing) pauseIcon(pc, pcy, pr * 0.34f, p.surface) else playIcon(pc + pr * 0.06f, pcy, pr * 0.36f, p.surface)
+        val pr = 0.14f * side
+        val pc = fx(0.24f)
+        val pcy = fy(0.77f)
+        drawCircle(pc, pcy, pr, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = if (framed) p.accent else p.muted })
+        val di = if (framed) p.onAccent else p.surface
+        if (MusicState.playing) pauseIcon(pc, pcy, pr * 0.34f, di) else playIcon(pc + pr * 0.06f, pcy, pr * 0.36f, di)
     }
 }

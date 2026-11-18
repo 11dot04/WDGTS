@@ -42,7 +42,9 @@ class MediaListener : NotificationListenerService() {
                 // the HUD's progress rings only need a redraw now and then
                 if (++beat % 6 == 0 && HudPrefs.musicLayout(this@MediaListener).let { it == 0 || it == 4 }) HudWidget().refreshAll(this@MediaListener)
             }
-            handler.postDelayed(this, 5_000L)
+            // with synced lyrics on a Depth widget, wake up for the next line instead of every five seconds
+            val next = if (MusicState.playing && MusicWidgets.depthPlaced(this@MediaListener)) Lyrics.msToNext(MusicState.positionMs()) else -1L
+            handler.postDelayed(this, if (next > 0) next.coerceIn(700L, 5_000L) else 5_000L)
         }
     }
 
@@ -124,6 +126,7 @@ class MediaListener : NotificationListenerService() {
                 }
             }
         }
+        Lyrics.ensure(this)
         MusicWidgets.refreshAll(this)
     }
 }
