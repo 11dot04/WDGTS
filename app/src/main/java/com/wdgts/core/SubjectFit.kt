@@ -2,6 +2,7 @@ package com.wdgts.core
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
@@ -89,20 +90,94 @@ object SubjectFit {
         cost(c, s, w, h) + (Math.abs(cx - w / 2f) + Math.abs(cy - h / 2f)) / w * 0.4f
     }!!
 
+    private class Under(val art: Bitmap, val fg: Bitmap?, val out: Bitmap)
+    private val unders = ArrayList<Under>()
+
+    private fun boxBlur(src: FloatArray, w: Int, h: Int, r: Int): FloatArray {
+        val tmp = FloatArray(w * h)
+        val dst = FloatArray(w * h)
+        val k = (2 * r + 1).toFloat()
+        val rowPre = FloatArray(w + 1)
+        for (y in 0 until h) {
+            for (x in 0 until w) rowPre[x + 1] = rowPre[x] + src[y * w + x]
+            for (x in 0 until w) tmp[y * w + x] = (rowPre[minOf(w, x + r + 1)] - rowPre[maxOf(0, x - r)]) / k
+        }
+        val colPre = FloatArray(h + 1)
+        for (x in 0 until w) {
+            for (y in 0 until h) colPre[y + 1] = colPre[y] + tmp[y * w + x]
+            for (y in 0 until h) dst[y * w + x] = (colPre[minOf(h, y + r + 1)] - colPre[maxOf(0, y - r)]) / k
+        }
+        return dst
+    }
+
     /**
-     * Draws [art] at [pl]. When it does not cover the box (zoomed out), a "cover" copy is the underlay and the placed
-     * one fades into it over [feather] px, so the photo never ends in a hard edge. [grey] desaturates both.
+     * A soft, out-of-focus stand-in for the photo, with the subject painted out: the colours around the subject
+     * are diffused into the hole (normalised blur at growing radii), then everything is softened. It is what shows
+     * where a zoomed-out photo does not reach the edge, so the subject is never seen twice.
      */
-    fun Canvas.drawPlaced(art: Bitmap, pl: Place, w: Int, h: Int, grey: Boolean, feather: Float) {
+    fun underlay(art: Bitmap, fg: Bitmap?): Bitmap {
+        synchronized(unders) { unders.firstOrNull { it.art === art && it.fg === fg }?.let { return it.out } }
+        val mw = 64
+        val mh = (mw * art.height.toFloat() / art.width).toInt().coerceIn(16, 128)
+        val n = mw * mh
+        val px = IntArray(n)
+        Bitmap.createScaledBitmap(art, mw, mh, true).getPixels(px, 0, mw, 0, 0, mw, mh)
+        val known = FloatArray(n) { 1f }
+        if (fg != null) {
+            val fp = IntArray(n)
+            Bitmap.createScaledBitmap(fg, mw, mh, true).getPixels(fp, 0, mw, 0, 0, mw, mh)
+            for (i in 0 until n) if ((fp[i] ushr 24) > 40) known[i] = 0f
+            repeat(2) {                                    // grow the hole so the subject's soft edge goes too
+                val c = known.copyOf()
+                for (y in 0 until mh) for (x in 0 until mw) {
+                    val i = y * mw + x
+                    if (c[i] > 0.5f && ((x > 0 && c[i - 1] < 0.5f) || (x < mw - 1 && c[i + 1] < 0.5f) ||
+                            (y > 0 && c[i - mw] < 0.5f) || (y < mh - 1 && c[i + mw] < 0.5f))) known[i] = 0f
+                }
+            }
+        }
+        val ch = Array(3) { c -> FloatArray(n) { ((px[it] shr (16 - 8 * c)) and 0xFF).toFloat() } }
+        val out = Array(3) { ch[it].copyOf() }
+        val done = BooleanArray(n) { known[it] > 0.5f }
+        for (r in intArrayOf(3, 8, 20, 48)) {
+            val q = boxBlur(known, mw, mh, r)
+            val pc = Array(3) { c -> boxBlur(FloatArray(n) { ch[c][it] * known[it] }, mw, mh, r) }
+            for (i in 0 until n) if (!done[i] && q[i] > 0.02f) {
+                for (c in 0 until 3) out[c][i] = pc[c][i] / q[i]
+                done[i] = true
+            }
+        }
+        var mean = floatArrayOf(128f, 128f, 128f)
+        val kn = known.sum()
+        if (kn > 0f) mean = FloatArray(3) { c -> var t = 0f; for (i in 0 until n) t += ch[c][i] * known[i]; t / kn }
+        for (i in 0 until n) if (!done[i]) for (c in 0 until 3) out[c][i] = mean[c]
+        val soft = Array(3) { boxBlur(boxBlur(out[it], mw, mh, 2), mw, mh, 2) }
+        val res = IntArray(n) {
+            Color.rgb(soft[0][it].toInt().coerceIn(0, 255), soft[1][it].toInt().coerceIn(0, 255), soft[2][it].toInt().coerceIn(0, 255))
+        }
+        val bmp = Bitmap.createBitmap(res, mw, mh, Bitmap.Config.ARGB_8888)
+        synchronized(unders) { if (unders.size >= 3) unders.removeAt(0); unders += Under(art, fg, bmp) }
+        return bmp
+    }
+
+    /**
+     * Draws [art] at [pl]. When it does not cover the box (zoomed out), a blurred, subject-free [underlay] is drawn
+     * first and the placed photo fades into it over [feather] px, so the photo never ends in a hard edge and the
+     * subject never shows twice. [fg] is the subject's cut-out; [grey] desaturates both layers.
+     */
+    fun Canvas.drawPlaced(art: Bitmap, pl: Place, w: Int, h: Int, grey: Boolean, feather: Float, fg: Bitmap? = null) {
         val paint = Paint(Paint.FILTER_BITMAP_FLAG).also {
             if (grey) it.colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
         }
-        val kc = maxOf(w / art.width.toFloat(), h / art.height.toFloat())
-        val cw = art.width * kc
-        val ch = art.height * kc
         val dst = pl.rect
         val gaps = pl.dw < w - 1f || pl.dh < h - 1f
-        if (gaps) drawBitmap(art, null, RectF((w - cw) / 2f, (h - ch) / 2f, (w + cw) / 2f, (h + ch) / 2f), paint)
+        if (gaps) {
+            val under = underlay(art, fg)
+            val kc = maxOf(w / under.width.toFloat(), h / under.height.toFloat())
+            val cw = under.width * kc
+            val ch = under.height * kc
+            drawBitmap(under, null, RectF((w - cw) / 2f, (h - ch) / 2f, (w + cw) / 2f, (h + ch) / 2f), paint)
+        }
         if (gaps) saveLayer(dst, null)
         drawBitmap(art, null, dst, paint)
         if (gaps) {
