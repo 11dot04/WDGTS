@@ -241,17 +241,20 @@ private fun solveDepth(art: Bitmap?, fg: Bitmap?, title: String, fp: MusicFonts.
     val sMax = minOf(0.30f * h, 100f * (w - 2 * pad) / longest)
     val variants = ArrayList<String?>().apply { add(fp.fvar); fp.fvar?.let { if (it.contains("'wdth'")) add(narrowed(it)) } }
 
-    var best = 99f
-    var bestPlace: SubjectFit.Place? = null
-    var bestFlow: Flowed? = null
-    for (c in cands) {
-        if (SubjectFit.outside(c, subj, w, h) >= 0.02f) continue
-        val base = SubjectFit.cost(c, subj, w, h)
-        if (base >= best) continue
+    // The order of precedence: the subject stays where the photo puts it and the type bends around it. Only when
+    // the type cannot be set at a decent size around the subject there does the photo move, and then as little as
+    // possible. (Searching both freely at once pushed the subject away from the type.)
+    fun moveCost(c: SubjectFit.Place) = (Math.abs(c.ox - (w - c.dw) / 2f) + Math.abs(c.oy - (h - c.dh) / 2f)) / w + (1f - c.kf) * 1.2f
+
+    /** The largest type that flows around the subject at [c] (not smaller than [minSize]) and the share of it the subject covers. */
+    fun bestAt(c: SubjectFit.Place, minSize: Float): Pair<Flowed, Float>? {
+        var bf: Flowed? = null
+        var bov = 0f
+        var bs = -1f
         for ((vi, v) in variants.withIndex()) {
             var size = sMax
-            for (i in 0 until 12) {
-                if (size < 0.045f * h) break
+            for (i in 0 until 14) {
+                if (size < minSize) break
                 val f = flow(words, size, v, fp, c, subj, w, pad, u, maxBase, memo)
                 if (f != null) {
                     val rects = f.runs.map {
@@ -260,14 +263,40 @@ private fun solveDepth(art: Bitmap?, fg: Bitmap?, title: String, fp: MusicFonts.
                     }
                     val ov = SubjectFit.covered(c, subj, rects)
                     if (ov <= 0.10f) {
-                        val sc = base + (1f - size / sMax) * 0.9f + f.splits * 0.02f + ov + (if (vi > 0) 0.03f else 0f) +
-                            (f.lines - 3).coerceAtLeast(0) * 0.05f
-                        if (sc < best) { best = sc; bestPlace = c; bestFlow = f }
+                        val sc = size * (if (vi > 0) 0.97f else 1f) - f.splits * 0.004f * sMax - ov * sMax
+                        if (sc > bs) { bs = sc; bf = f; bov = ov }
                         break                                   // sizes run downwards: the first fit is the largest
                     }
                 }
                 size *= 0.9f
             }
+        }
+        return bf?.let { it to bov }
+    }
+
+    val valid = cands.filter { SubjectFit.outside(it, subj, w, h) < 0.02f }.sortedBy { moveCost(it) }
+    var bestPlace: SubjectFit.Place? = null
+    var bestFlow: Flowed? = null
+
+    // pass 1: the least-moved placements at which the type is still big (a few equally-moved ones compete on size)
+    val decent = maxOf(0.075f * h, 0.35f * sMax)
+    var m0 = -1f
+    var bestScore = -1f
+    for (c in valid) {
+        val mv = moveCost(c)
+        if (m0 >= 0f && mv > m0 + 0.04f) break
+        val r = bestAt(c, decent) ?: continue
+        if (m0 < 0f) m0 = mv
+        val sc = r.first.size - r.second * sMax
+        if (sc > bestScore) { bestScore = sc; bestPlace = c; bestFlow = r.first }
+    }
+    // pass 2: nothing is big enough anywhere near: take any size, trading it against how far the photo moves
+    if (bestFlow == null) {
+        var best = -99f
+        for (c in valid) {
+            val r = bestAt(c, 0.045f * h) ?: continue
+            val sc = r.first.size / sMax - moveCost(c) * 1.2f - r.second - (r.first.lines - 3).coerceAtLeast(0) * 0.05f
+            if (sc > best) { best = sc; bestPlace = c; bestFlow = r.first }
         }
     }
     val bp = bestPlace
