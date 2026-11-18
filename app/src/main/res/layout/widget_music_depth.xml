@@ -8,25 +8,20 @@
         android:scaleType="fitXY" />
     <FrameLayout android:id="@+id/zone_main"
         android:layout_width="match_parent" android:layout_height="match_parent" />
-    <!-- control row zones (live only while the controls are shown) -->
+    <!-- button row, always live: previous | next (left half), play / pause (right half).
+         Fractions match MusicDepthWidget: row top 78.5%, height 16.5%, side margin 6.5%, gap 3%. -->
     <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
         android:orientation="vertical">
-        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="76" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="78.5" />
         <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
-            android:layout_weight="24" android:orientation="horizontal">
-            <FrameLayout android:id="@+id/zone_prev" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="30" />
-            <FrameLayout android:id="@+id/zone_play" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="40" />
-            <FrameLayout android:id="@+id/zone_next" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="30" />
+            android:layout_weight="16.5" android:orientation="horizontal">
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="6.5" />
+            <FrameLayout android:id="@+id/zone_prev" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="21" />
+            <FrameLayout android:id="@+id/zone_next" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="21" />
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="3" />
+            <FrameLayout android:id="@+id/zone_play" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="42" />
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="6.5" />
         </LinearLayout>
-    </LinearLayout>
-    <!-- top-right toggle (dots / pill) -->
-    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
-        android:orientation="vertical">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
-            android:layout_weight="15" android:orientation="horizontal">
-            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="76" />
-            <FrameLayout android:id="@+id/zone_toggle" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="24" />
-        </LinearLayout>
-        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="85" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="5" />
     </LinearLayout>
 </FrameLayout>

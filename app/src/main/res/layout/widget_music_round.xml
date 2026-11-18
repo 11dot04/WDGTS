@@ -6,24 +6,24 @@
         android:scaleType="fitCenter" />
     <FrameLayout android:id="@+id/zone_main"
         android:layout_width="match_parent" android:layout_height="match_parent" />
-    <!-- previous / next pill (upper right) and the play disc (lower left), as fractions of the square -->
+    <!-- previous / next pill (x .50-.90, y .10-.29) and the play disc (x .10-.38, y .63-.91), as fractions of the square -->
     <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
         android:orientation="vertical">
-        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="15" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="10" />
         <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
-            android:layout_weight="17" android:orientation="horizontal">
-            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="49" />
-            <FrameLayout android:id="@+id/zone_prev" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="18" />
-            <FrameLayout android:id="@+id/zone_next" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="18" />
-            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="15" />
+            android:layout_weight="19" android:orientation="horizontal">
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="50" />
+            <FrameLayout android:id="@+id/zone_prev" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="20" />
+            <FrameLayout android:id="@+id/zone_next" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="20" />
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="10" />
         </LinearLayout>
-        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="28" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="34" />
         <LinearLayout android:layout_width="match_parent" android:layout_height="0dp"
-            android:layout_weight="26" android:orientation="horizontal">
-            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="13" />
-            <FrameLayout android:id="@+id/zone_play" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="26" />
-            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="61" />
+            android:layout_weight="28" android:orientation="horizontal">
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="10" />
+            <FrameLayout android:id="@+id/zone_play" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="28" />
+            <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="62" />
         </LinearLayout>
-        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="14" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="9" />
     </LinearLayout>
 </FrameLayout>
