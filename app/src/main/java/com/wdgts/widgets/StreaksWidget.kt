@@ -169,7 +169,9 @@ class StreaksWidget : AppWidgetProvider() {
             }
             // an outline that is the whole square is a badge background, not a shape: use the glyph's own outline
             val shape: BooleanArray = if (outline == null || outline.count { it } > 0.92f * n * n) filled(mA, n) else outline
-            val out = IntArray(n * n) { if (shape[it]) ((255 - mA[it]) shl 24) or 0x00FFFFFF else 0 }
+            // keep the result crisp: the faint remainders of soft edges and hairlines (Lumosity's ring) are dropped
+            fun crisp(a: Int) = if (a < 100) 0 else if (a > 200) 255 else (a - 100) * 255 / 100
+            val out = IntArray(n * n) { if (shape[it]) (crisp(255 - mA[it]) shl 24) or 0x00FFFFFF else 0 }
             val res = Bitmap.createBitmap(out, n, n, Bitmap.Config.ARGB_8888)
             return if (GlyphMask.coverage(res) < 0.02f) mask else res
         }
@@ -299,6 +301,7 @@ class StreaksWidget : AppWidgetProvider() {
             val tf = Fonts.display(ctx)
             val mono = Fonts.mono(ctx)
             val u = minOf(w, h) / 100f
+            val dot = 1.0f * u                            // every shield dot, in every tile, is this size
 
             // the widget is transparent; only a faint scrim sits behind the tiles, in the theme's own tile tone
             // (dark in dark mode, pale in light mode) rather than a fixed black
@@ -333,17 +336,21 @@ class StreaksWidget : AppWidgetProvider() {
                         icon(ctx, def, rect.left + 11f * u, rect.top + 11.5f * u, 11.5f * u, ink)   // KWGT icons are 49-66 px on a 486 px card
                         val (sz, fv) = fitByAxis(num, rect.width() - 10f * u, countSize, tf, wght = 380, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.bottom - 3.4f * u, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
-                        if (rule.cap > 0) shieldDots(rect.right - 4.2f * u, rect.top + 5.6f * u, 1.25f * u, st.shields, rule.cap, ink)
+                        if (rule.cap > 0) shieldDots(rect.right - 4.2f * u, rect.top + 5.6f * u, dot, st.shields, rule.cap, ink)
                     }
                     cells == 2 -> {      // wide: icon left, count right
-                        icon(ctx, def, rect.left + rect.height() * 0.52f, rect.centerY(), rect.height() * 0.64f, ink)
+                        // shields sit in the free strip under the icon, which moves up to make room for them
+                        val up = if (rule.cap > 0) 1.5f * u else 0f
+                        val icx = rect.left + rect.height() * 0.52f
+                        icon(ctx, def, icx, rect.centerY() - up, rect.height() * 0.64f, ink)
                         val (sz, fv) = fitByAxis(num, rect.width() * 0.62f, countSize, tf, wght = 380, wdthMax = 100)
                         label(num, rect.right - 3.6f * u, rect.centerY() + sz * 0.35f, sz, ink, tf, Paint.Align.RIGHT, -0.02f, fv)
-                        if (rule.cap > 0) shieldDots(rect.right - 4.2f * u, rect.top + 3.6f * u, 0.9f * u, st.shields, rule.cap, ink)
+                        if (rule.cap > 0) shieldDots(icx, rect.bottom - 2.7f * u, dot, st.shields, rule.cap, ink, centred = true)
                     }
                     else -> {
-                        icon(ctx, def, rect.centerX(), rect.centerY(), minOf(rect.width(), rect.height()) * 0.62f, ink)
-                        if (rule.cap > 0) shieldDots(rect.centerX(), rect.bottom - 3.2f * u, 0.75f * u, st.shields, rule.cap, ink, centred = true)
+                        val up = if (rule.cap > 0) 1.5f * u else 0f
+                        icon(ctx, def, rect.centerX(), rect.centerY() - up, minOf(rect.width(), rect.height()) * 0.62f, ink)
+                        if (rule.cap > 0) shieldDots(rect.centerX(), rect.bottom - 2.7f * u, dot, st.shields, rule.cap, ink, centred = true)
                     }
                 }
             }

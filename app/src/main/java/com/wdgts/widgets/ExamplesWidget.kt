@@ -139,27 +139,61 @@ class ExamplesWidget : AppWidgetProvider() {
          * into morae (賦課 ふ|か, 憂鬱 ゆう|うつ), otherwise one ruby is centred over the whole run.
          * If the reading can't be matched, one ruby goes over the whole word.
          */
+        private fun isDigit(c: Char) = c in '0'..'9' || c in '\uFF10'..'\uFF19'
+
+        private val ONES = listOf(
+            listOf("ぜろ", "れい"), listOf("いち", "いっ"), listOf("に"), listOf("さん"), listOf("よん", "し", "よ"), listOf("ご"),
+            listOf("ろく", "ろっ"), listOf("なな", "しち"), listOf("はち", "はっ"), listOf("きゅう", "く"),
+        )
+
+        /** Possible readings of a number below 100 as a counter prefix (12 -> じゅうに, 4 -> よん / し); empty if out of range. */
+        private fun numberReadings(n: Int): List<String> {
+            if (n !in 0..99) return emptyList()
+            if (n < 10) return ONES[n]
+            val tens = n / 10
+            val ones = n % 10
+            val tenPart = if (tens == 1) listOf("じゅう", "じゅっ", "じっ") else ONES[tens].flatMap { t -> listOf(t + "じゅう", t + "じゅっ") }
+            if (ones == 0) return tenPart
+            return tenPart.filter { it.endsWith("じゅう") }.flatMap { t -> ONES[ones].map { t + it } }
+        }
+
+        private fun digitValue(s: String): Int? = s.map { if (it in '\uFF10'..'\uFF19') '0' + (it - '\uFF10') else it }.joinToString("").toIntOrNull()
+
         private fun rubyPieces(written: String, reading: String): List<Ruby> {
             val rd = reading.map { hira(it) }.joinToString("")
-            val runs = mutableListOf<Triple<Int, Int, Boolean>>()          // from, to, isKanjiRun
+            // kind: 0 = kana, 1 = kanji, 2 = digits
+            val runs = mutableListOf<Triple<Int, Int, Int>>()
             var i = 0
             while (i < written.length) {
-                val k = isKanji(written[i]); var j = i
-                while (j < written.length && isKanji(written[j]) == k) j++
-                runs += Triple(i, j, k); i = j
+                val kind = if (isKanji(written[i])) 1 else if (isDigit(written[i])) 2 else 0
+                var j = i
+                while (j < written.length && (if (isKanji(written[j])) 1 else if (isDigit(written[j])) 2 else 0) == kind) j++
+                runs += Triple(i, j, kind); i = j
             }
             val re = Regex(runs.joinToString("", "^", "$") { (a, b, k) ->
-                if (k) "(.+?)" else Regex.escape(written.substring(a, b).map { hira(it) }.joinToString(""))
+                when (k) {
+                    1 -> "(.+?)"
+                    2 -> {
+                        val c = digitValue(written.substring(a, b))?.let { numberReadings(it) }.orEmpty()
+                        if (c.isEmpty()) Regex.escape(written.substring(a, b)) else "(" + c.joinToString("|") { Regex.escape(it) } + ")"
+                    }
+                    else -> Regex.escape(written.substring(a, b).map { hira(it) }.joinToString(""))
+                }
             })
-            val m = re.matchEntire(rd) ?: return if (runs.any { it.third }) {
-                val first = runs.first { it.third }.first
-                val last = runs.last { it.third }.second
+            val m = re.matchEntire(rd) ?: return if (runs.any { it.third == 1 }) {
+                val first = runs.first { it.third == 1 }.first
+                val last = runs.last { it.third == 1 }.second
                 listOf(Ruby(reading, first, last))
             } else emptyList()
             val out = mutableListOf<Ruby>()
             var g = 1
             for ((a, b, k) in runs) {
-                if (!k) continue
+                if (k == 0) continue
+                if (k == 2) {
+                    val c = digitValue(written.substring(a, b))?.let { numberReadings(it) }.orEmpty()
+                    if (c.isNotEmpty()) out += Ruby(m.groupValues[g++], a, b)
+                    continue
+                }
                 val txt = m.groupValues[g++]
                 val n = b - a
                 val morae = txt.indices.filter { it == 0 || !isSmall(txt[it]) }

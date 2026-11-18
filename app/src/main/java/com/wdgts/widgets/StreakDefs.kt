@@ -20,7 +20,7 @@ data class StreakDef(
 )
 
 val STREAKS = listOf(
-    StreakDef("duo", "Duolingo", 0, 0, 2, 2, pkg = "com.duolingo", seed = 1035, invert = true),
+    StreakDef("duo", "Duolingo", 0, 0, 2, 2, pkg = "com.duolingo", seed = 1035),
     StreakDef("brilliant", "Brilliant", 0, 2, 2, 2, pkg = "org.brilliant.android", match = "brilliant", seed = 304),
     StreakDef("globo", "Globo", 2, 0, 1, 1, match = "globo"),
     StreakDef("nyt", "NYT Games", 3, 0, 1, 1, pkg = "com.nytimes.crossword", match = "nyt games"),

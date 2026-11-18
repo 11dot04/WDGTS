@@ -128,8 +128,10 @@ class TithiWidget : AppWidgetProvider() {
             val ampm = endLabel.substringAfterLast(' ')                                // "AM"
             val ampmSize = full * 0.5f
             val stickerSize = full * 0.3f
-            val sv = Fonts.axes(wght = 700, wdth = 100)
-            val colW = if (nextDay) maxOf(measureText(ampm, ampmSize, tf, 0f), measureText("+ONE", stickerSize, tf, 0.04f, sv) + 0.9f * stickerSize) else 0f
+            // the sticker is exactly as wide as AM; its text is condensed (then shrunk) to sit inside it
+            val colW = if (nextDay) measureText(ampm, ampmSize, tf, 0f) else 0f
+            val (sSize, sv) = if (nextDay) fitByAxis("+ONE", colW - 0.7f * stickerSize, stickerSize, tf, wght = 700, wdthMax = 100)
+            else stickerSize to null
             val gapCol = if (nextDay) 0.35f * full else 0f
             val (size, fv) = fitByAxis(if (nextDay) timeText else endLabel, right - left - colW - gapCol, full, tf, wght = 400, grow = true)
             val lh = size * 1.16f                                                       // and a baseline pitch of ~67 px
@@ -155,9 +157,9 @@ class TithiWidget : AppWidgetProvider() {
                 val sTop = capTop + cap * ampmSize + gap
                 val r = RectF(colLeft, sTop, colRight, y4)
                 drawRect(r, Paint(Paint.ANTI_ALIAS_FLAG).also { it.color = p.faint })
-                val tw = measureText("+ONE", stickerSize, tf, 0.04f, sv)
-                val scap = Rect().also { textPaint(stickerSize, 0, tf, fvar = sv).getTextBounds("E", 0, 1, it) }.height().toFloat()
-                label("+ONE", r.centerX() - tw / 2f, r.centerY() + scap / 2f, stickerSize, p.surface, tf, tracking = 0.04f, fvar = sv)
+                val tw = measureText("+ONE", sSize, tf, 0f, sv)
+                val scap = Rect().also { textPaint(sSize, 0, tf, fvar = sv).getTextBounds("E", 0, 1, it) }.height().toFloat()
+                label("+ONE", r.centerX() - tw / 2f, r.centerY() + scap / 2f, sSize, p.surface, tf, fvar = sv)
             }
             label(tithi, right, y3, size, p.muted, tf, Paint.Align.RIGHT, fvar = fv)
             label(month, left, y2, ms, p.accent, tf, fvar = mv)
