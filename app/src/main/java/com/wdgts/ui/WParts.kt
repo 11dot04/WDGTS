@@ -48,6 +48,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -73,6 +74,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -82,6 +84,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -380,26 +383,30 @@ fun WSubFrame(onBack: () -> Unit, pinned: (@Composable () -> Unit)? = null, cont
 }
 
 /**
- * The big screen title. Long words are fitted by narrowing the font's width axis, step by step, and the size is only
- * touched when even the narrowest setting is too wide: a title stays the same size on every screen.
+ * One line of heavy display text that always fits: the font's width axis is narrowed step by step until it does.
+ * The size never changes, so the same kind of text is the same size everywhere.
  */
 @Composable
-fun WTitle(text: String) {
+fun FitWidthText(text: String, size: Int, color: Color, modifier: Modifier = Modifier, spacing: Float = -0.4f) {
     val c = LocalContext.current
     val measurer = rememberTextMeasurer()
-    val base = wDisplay(56, wdth = 125f, spacing = -1.5f)
-    val t = text.uppercase()
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val base = wDisplay(size, color, wdth = 125f, spacing = spacing)
+    BoxWithConstraints(modifier) {
         val maxW = if (constraints.hasBoundedWidth) constraints.maxWidth else Int.MAX_VALUE
         val steps = listOf(125f, 114f, 104f, 94f, 84f, 75f)
-        val fit = remember(t, maxW) {
+        val fit = remember(text, size, maxW) {
             steps.firstOrNull { w ->
-                measurer.measure(AnnotatedString(t), style = base.copy(fontFamily = WFonts.display(c, w)), softWrap = false).size.width <= maxW
+                measurer.measure(AnnotatedString(text), style = base.copy(fontFamily = WFonts.display(c, w)), softWrap = false).size.width <= maxW
             }
-        }
-        if (fit != null) Text(t, style = base.copy(fontFamily = WFonts.display(c, fit)), softWrap = false, maxLines = 1)
-        else FitText(t, base.copy(fontFamily = WFonts.display(c, 75f)), minSize = 24.sp)
+        } ?: steps.last()
+        Text(text, style = base.copy(fontFamily = WFonts.display(c, fit)), softWrap = false, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+}
+
+/** The big screen title: 56sp on every screen, fitted by the width axis. */
+@Composable
+fun WTitle(text: String) {
+    FitWidthText(text.uppercase(), 56, LocalW.current.ink, Modifier.fillMaxWidth(), spacing = -1.5f)
 }
 
 /** A line of mono caps under a title. */
@@ -465,7 +472,7 @@ fun WRow(item: WItem, corners: List<Dp>) {
     val interactive = item.checked != null || item.onClick != null
     val source = remember { MutableInteractionSource() }
     val onP by animateFloatAsState(if (item.checked == true) 1f else 0f, WMotion.spatial(), label = "rowOn")
-    val shape = PressCornerShape(corners[0], corners[1], corners[2], corners[3], maxOf(if (interactive) pressMorph(source) else 0f, onP))
+    val shape = PressCornerShape(corners[0], corners[1], corners[2], corners[3], maxOf(if (interactive) pressMorph(source) else 0f, onP * 0.55f))
     Row(
         Modifier
             .fillMaxWidth()
@@ -496,9 +503,9 @@ fun WRow(item: WItem, corners: List<Dp>) {
 
 /** A plate for anything that is not a row: chips, fields, a sentence. */
 @Composable
-fun WPlate(label: String? = null, hint: String? = null, content: @Composable ColumnScope.() -> Unit) {
+fun WPlate(label: String? = null, hint: String? = null, count: Int? = null, content: @Composable ColumnScope.() -> Unit) {
     val p = LocalW.current
-    if (label != null) WLabel(label)
+    if (label != null) WLabel(label, count = count)
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(p.surface).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -526,7 +533,43 @@ fun WChip(text: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Single choice from a list, as wrapping chips. */
+/** Single choice from a list of long labels: stacked rows that interlock, the picked one ringed in the accent with a tick. */
+@Composable
+fun WPick(options: List<String>, selected: Int, onPick: (Int) -> Unit) {
+    val p = LocalW.current
+    val view = LocalView.current
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        options.forEachIndexed { i, text ->
+            val on = i == selected
+            val corners = groupCorners(i, options.size)
+            val source = remember { MutableInteractionSource() }
+            val t = pressMorph(source)
+            val shape = PressCornerShape(corners[0], corners[1], corners[2], corners[3], t)
+            val ring by animateColorAsState(if (on) p.acid else Color.Transparent, label = "pickRing")
+            Row(
+                Modifier.fillMaxWidth().clip(shape).background(p.paper).border(1.5.dp, ring, shape)
+                    .clickable(interactionSource = source, indication = null) { view.tick(); onPick(i) }
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text, style = wBody(15, if (on) 700 else 600), modifier = Modifier.weight(1f).padding(end = 12.dp))
+                Box(
+                    Modifier.size(22.dp).clip(CircleShape).background(if (on) p.acid else Color.Transparent)
+                        .border(if (on) 0.dp else 1.5.dp, p.outline, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (on) Canvas(Modifier.size(12.dp)) {
+                        val w = size.width
+                        drawLine(p.onAcid, Offset(w * 0.10f, w * 0.55f), Offset(w * 0.40f, w * 0.85f), strokeWidth = 3.5f, cap = StrokeCap.Round)
+                        drawLine(p.onAcid, Offset(w * 0.40f, w * 0.85f), Offset(w * 0.92f, w * 0.18f), strokeWidth = 3.5f, cap = StrokeCap.Round)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Single choice from a list of short labels, as wrapping chips. */
 @Composable
 fun WChips(options: List<String>, selected: Int, onPick: (Int) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -581,14 +624,22 @@ fun WButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, f
 
 // ==========================================================
 // HOME TILE
-// A square or wide tile. A widget's tile shows that widget live; every tile also carries a Material 3 Expressive
-// shape badge that morphs into a second shape while the tile is pressed. The loud tile is filled with the accent.
-// onClick hands back the tile's centre, so the screen it opens can grow out of it.
+// A widget's tile: a header with a Material 3 Expressive shape badge (it morphs into a second shape while the tile is
+// pressed) holding the widget's icon and a mono caption, the widget itself live, and its name fitted to the width.
+// Tiles without a widget (Access, Look, Widgets) put a bigger badge on top instead. The loud tile is filled with the
+// accent. onClick hands back the tile's centre, so the screen it opens can grow out of it.
 // ==========================================================
+@Composable
+private fun TileBadge(icon: ImageVector, morph: Morph, t: Float, box: Dp, glyph: Dp, bg: Color, fg: Color) {
+    Box(Modifier.size(box).clip(MorphShape(morph, t)).background(bg), contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(glyph))
+    }
+}
+
 @Composable
 fun WTile(
     modifier: Modifier,
-    code: String,
+    icon: ImageVector,
     title: String,
     caption: String,
     from: RoundedPolygon,
@@ -605,6 +656,8 @@ fun WTile(
     val fill = if (loud) p.acid else p.surface
     val ink = if (loud) p.onAcid else p.ink
     val sub = if (loud) p.onAcid.copy(alpha = 0.7f) else p.soft
+    val badgeBg = if (loud) p.onAcid else p.acid
+    val badgeFg = if (loud) p.acid else p.onAcid
     var center by remember { mutableStateOf(Offset.Zero) }
     Column(
         modifier
@@ -615,31 +668,21 @@ fun WTile(
             .padding(14.dp),
     ) {
         if (preview != null) {
-            Box(
-                Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                    .background(if (loud) p.onAcid.copy(alpha = 0.10f) else p.paper).padding(8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                WidgetImage(preview, Modifier.fillMaxSize(), radius = 14.dp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                TileBadge(icon, morph, t, 30.dp, 16.dp, badgeBg, badgeFg)
+                Text(
+                    caption.uppercase(), style = wMono(10, sub, FontWeight.Medium, 1.1f), maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End, modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
             }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    Modifier.size(30.dp).clip(MorphShape(morph, t)).background(if (loud) p.onAcid else p.acid),
-                    contentAlignment = Alignment.Center,
-                ) { Text(code, style = wMono(11, if (loud) p.acid else p.onAcid, FontWeight.Bold, 0.3f)) }
-                Column {
-                    Text(title.uppercase(), style = wDisplay(20, ink, wdth = 125f, spacing = -0.4f), maxLines = 1)
-                    Text(caption.uppercase(), style = wMono(10, sub, FontWeight.Medium, 1.1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
+            Spacer(Modifier.height(10.dp))
+            WidgetImage(preview, Modifier.weight(1f).fillMaxWidth(), radius = 18.dp)
+            Spacer(Modifier.height(10.dp))
+            FitWidthText(title.uppercase(), 20, ink, Modifier.fillMaxWidth())
         } else {
-            Box(
-                Modifier.size(46.dp).clip(MorphShape(morph, t)).background(if (loud) p.onAcid else p.acid),
-                contentAlignment = Alignment.Center,
-            ) { Text(code, style = wMono(11, if (loud) p.acid else p.onAcid, FontWeight.Bold, 0.3f)) }
+            TileBadge(icon, morph, t, 46.dp, 24.dp, badgeBg, badgeFg)
             Spacer(Modifier.weight(1f))
-            Text(title.uppercase(), style = wDisplay(24, ink, wdth = 125f, spacing = -0.5f), maxLines = 1)
+            FitWidthText(title.uppercase(), 20, ink, Modifier.fillMaxWidth())
             Spacer(Modifier.height(4.dp))
             Text(caption.uppercase(), style = wMono(10, sub, FontWeight.Medium, 1.1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

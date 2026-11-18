@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -91,6 +92,10 @@ fun WOnboarding(ssTick: Int, onDone: () -> Unit) {
             }
         }
 
+        // ---- scrims: content scrolls under the bars without colliding with them
+        Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(110.dp).background(Brush.verticalGradient(listOf(p.paper, Color.Transparent))))
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(170.dp).background(Brush.verticalGradient(listOf(Color.Transparent, p.paper))))
+
         // ---- progress and skip
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 18.dp, vertical = 14.dp),
@@ -136,7 +141,7 @@ private fun Welcome() {
     WTitle("WDGTS")
     Text(
         "A few quiet widgets for your home screen: a HUD, the panchang, streaks, music, countdowns and more. " +
-            "Four short steps and you are set.",
+            "Three short steps and you are set.",
         style = wBody(16, 500, p.soft, 23),
     )
 }

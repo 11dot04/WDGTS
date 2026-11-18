@@ -146,8 +146,8 @@ private fun HudScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
         WTitle("HUD")
         WCaption("Fixed date line, three dynamic lines")
 
-        WPlate("Date line", "Between the month and the time. The Nothing clock puts a time-zone burst there.") {
-            WChips(
+        WPlate("Date line", "Between the month and the time. The Nothing clock puts a time-zone burst there.", count = 4) {
+            WPick(
                 listOf("Nothing", "Sun or moon (day / night)", "Time zone, always", "Time zone, only away from home"), badge,
             ) { badge = it; HudPrefs.setBadgeMode(c, it); refresh() }
         }
@@ -159,8 +159,8 @@ private fun HudScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
                 }),
             ),
         )
-        WPlate("Now playing style", "One line when it fits, otherwise the artist goes under the title.") {
-            WChips(
+        WPlate("Now playing style", "One line when it fits, otherwise the artist goes under the title.", count = 6) {
+            WPick(
                 listOf(
                     "Vary by track", "Title, then artist", "TITLE (BY) ARTIST + rings", "TITLE © [ARTIST]",
                     "TITLE + progress rings + ARTIST", "TITLE + album-art strip + ARTIST",
@@ -168,8 +168,8 @@ private fun HudScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
                 layout,
             ) { layout = it; HudPrefs.setMusicLayout(c, it); refresh() }
         }
-        WPlate("Now playing button") {
-            WChips(listOf("Arrow (opens the player)", "Pause pill", "Cassette pill (pause)"), control) {
+        WPlate("Now playing button", count = 3) {
+            WPick(listOf("Arrow (opens the player)", "Pause pill", "Cassette pill (pause)"), control) {
                 control = it; HudPrefs.setMusicControl(c, it); refresh()
             }
         }
@@ -510,7 +510,7 @@ private fun StudyScreen(onBack: () -> Unit) {
     WSubFrame(onBack, pinned = { PreviewStage(listOf(Kinds.Kanji, Kinds.Examples)) }) {
         WTitle("Study")
         WCaption("A kanji a day, and ten words that use it")
-        WPlate("JLPT level", "Which level the daily kanji is drawn from. Tapping the level on the widget steps it down too.") {
+        WPlate("JLPT level", "Which level the daily kanji is drawn from. Tapping the level on the widget steps it down too.", count = 5) {
             WChips(listOf("N5", "N4", "N3", "N2", "N1"), 5 - level) { i ->
                 level = 5 - i
                 Prefs.setJlpt(c, level)
@@ -670,7 +670,7 @@ private fun LookScreen(onBack: () -> Unit) {
     WSubFrame(onBack) {
         WTitle("Look")
         WCaption("This app only; the widgets have their own settings")
-        WPlate("Appearance", "Follow the phone, or force one side.") {
+        WPlate("Appearance", "Follow the phone, or force one side.", count = 3) {
             WChips(listOf("System", "Light", "Dark"), appearance.indexOf(UiPrefs.appearance).coerceAtLeast(0)) {
                 UiPrefs.setAppearance(c, appearance[it])
             }

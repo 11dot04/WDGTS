@@ -3,6 +3,7 @@ package com.wdgts.ui
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
@@ -41,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -123,7 +125,9 @@ object Kinds {
 fun WidgetImage(kind: WidgetKind, modifier: Modifier = Modifier, radius: Dp = 24.dp) {
     val c = LocalContext.current
     val density = LocalDensity.current.density
-    val p = LocalW.current
+    // Widgets are drawn for a wallpaper and follow the phone's light or dark, not the app's: the backdrop does the same.
+    val sysDark = (c.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    val back = if (sysDark) Color(0xFF0C0C0C) else Color(0xFFF3F1EA)
     var bmp by remember(kind.id) { mutableStateOf<ImageBitmap?>(null) }
     val tick = Preview.tick
     LaunchedEffect(kind.id, tick) {
@@ -138,7 +142,7 @@ fun WidgetImage(kind: WidgetKind, modifier: Modifier = Modifier, radius: Dp = 24
         val r = kind.ratio
         val fitW = if (maxWidth / maxHeight > r) maxHeight * r else maxWidth
         val fitH = fitW / r
-        Box(Modifier.size(fitW, fitH).clip(RoundedCornerShape(radius)).background(p.surface)) {
+        Box(Modifier.size(fitW, fitH).clip(RoundedCornerShape(radius)).background(back)) {
             val shown = bmp
             if (shown != null) Image(shown, kind.label, Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
         }

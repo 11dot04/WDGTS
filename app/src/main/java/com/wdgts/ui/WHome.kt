@@ -3,6 +3,18 @@ package com.wdgts.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.HourglassBottom
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.NightsStay
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.SportsSoccer
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,7 +44,6 @@ import com.wdgts.core.Prefs
 import com.wdgts.widgets.STREAKS
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.IsoFields
 import java.util.Locale
@@ -48,7 +59,10 @@ fun WHome(go: (Screen, Offset) -> Unit) {
     val p = LocalW.current
     val c = LocalContext.current
     val today = remember { LocalDate.now() }
-    val zone = remember { ZoneId.systemDefault().getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH) }
+    val zone = remember {
+        val tz = java.util.TimeZone.getDefault()
+        tz.getDisplayName(tz.inDaylightTime(java.util.Date()), java.util.TimeZone.SHORT, Locale.ENGLISH)
+    }
     val version = remember {
         runCatching { c.packageManager.getPackageInfo(c.packageName, 0).versionName }.getOrNull() ?: "dev"
     }
@@ -58,7 +72,7 @@ fun WHome(go: (Screen, Offset) -> Unit) {
     val granted = (if (listenerOn) 1 else 0) + (if (calendarOn) 1 else 0)
     val daysLeft = (Prefs.cdEnd(c) - today.toEpochDay()).coerceAtLeast(0)
 
-    val tall = 214.dp
+    val tall = 236.dp
 
     Box(Modifier.fillMaxSize().background(p.paper)) {
         Column(
@@ -92,46 +106,46 @@ fun WHome(go: (Screen, Offset) -> Unit) {
             // ---- widgets
             WLabel("Widgets", count = 8)
             WTile(
-                Modifier.fillMaxWidth().height(220.dp), "HU", "HUD", "5×2 · live", Poly.Sunny, Poly.Cookie9,
+                Modifier.fillMaxWidth().height(236.dp), Icons.Rounded.Dashboard, "HUD", "5×2 · live", Poly.Sunny, Poly.Cookie9,
                 preview = Kinds.Hud,
             ) { go(Screen.Hud, it) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WTile(
-                    Modifier.weight(1f).height(tall), "PN", "Panchang", "%.2f, %.2f".format(Prefs.lat(c), Prefs.lon(c)),
+                    Modifier.weight(1f).height(tall), Icons.Rounded.NightsStay, "Panchang", "%.2f, %.2f".format(Prefs.lat(c), Prefs.lon(c)),
                     Poly.Cookie6, Poly.Circle, preview = Kinds.Tithi,
                 ) { go(Screen.Panchang, it) }
                 WTile(
-                    Modifier.weight(1f).height(tall), "ST", "Streaks", "${STREAKS.size} tiles",
+                    Modifier.weight(1f).height(tall), Icons.Rounded.LocalFireDepartment, "Streaks", "${STREAKS.size} tiles",
                     Poly.Flower, Poly.Puffy, preview = Kinds.Streaks,
                 ) { go(Screen.Streaks, it) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WTile(
-                    Modifier.weight(1f).height(tall), "CD", "Countdown", "$daysLeft days left",
+                    Modifier.weight(1f).height(tall), Icons.Rounded.HourglassBottom, "Countdown", "$daysLeft days left",
                     Poly.Pentagon, Poly.Cookie12, preview = Kinds.CountdownSwiss,
                 ) { go(Screen.Countdown, it) }
                 WTile(
-                    Modifier.weight(1f).height(tall), "SP", "Sports", "team ${Prefs.teamId(c)} · F1",
+                    Modifier.weight(1f).height(tall), Icons.Rounded.SportsSoccer, "Sports", "team ${Prefs.teamId(c)} · F1",
                     Poly.SoftBurst, Poly.Sunny, preview = Kinds.Team,
                 ) { go(Screen.Sports, it) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WTile(
-                    Modifier.weight(1f).height(tall), "MU", "Music", "3 widgets",
+                    Modifier.weight(1f).height(tall), Icons.Rounded.MusicNote, "Music", "3 widgets",
                     Poly.Cookie9, Poly.Flower, preview = Kinds.MusicRound,
                 ) { go(Screen.Music, it) }
                 WTile(
-                    Modifier.weight(1f).height(tall), "KJ", "Study", "kanji · N${Prefs.jlpt(c)}",
+                    Modifier.weight(1f).height(tall), Icons.Rounded.Translate, "Study", "kanji · N${Prefs.jlpt(c)}",
                     Poly.Sunny, Poly.Pentagon, preview = Kinds.Kanji,
                 ) { go(Screen.Study, it) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WTile(
-                    Modifier.weight(1f).height(tall), "WK", "Wikipedia", "article of the day",
+                    Modifier.weight(1f).height(tall), Icons.Rounded.MenuBook, "Wikipedia", "daily article",
                     Poly.Puffy, Poly.Cookie6, preview = Kinds.Wiki,
                 ) { go(Screen.Wiki, it) }
                 WTile(
-                    Modifier.weight(1f).height(tall), "+", "Add widgets", "${Kinds.all.size} available",
+                    Modifier.weight(1f).height(tall), Icons.Rounded.Add, "Widgets", "${Kinds.all.size} to add",
                     Poly.Cookie12, Poly.SoftBurst, loud = true,
                 ) { go(Screen.Gallery, it) }
             }
@@ -140,11 +154,11 @@ fun WHome(go: (Screen, Offset) -> Unit) {
             WLabel("System", count = 2)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WTile(
-                    Modifier.weight(1f).height(150.dp), "AX", "Access", "$granted/2 granted",
+                    Modifier.weight(1f).height(150.dp), Icons.Rounded.Key, "Access", "$granted/2 granted",
                     Poly.Puffy, Poly.Flower,
                 ) { go(Screen.Connections, it) }
                 WTile(
-                    Modifier.weight(1f).height(150.dp), "UI", "Look", "${UiPrefs.appearance} · ${if (UiPrefs.materialYou) "material you" else "acid"}",
+                    Modifier.weight(1f).height(150.dp), Icons.Rounded.Palette, "Look", "${UiPrefs.appearance} · ${if (UiPrefs.materialYou) "material you" else "acid"}",
                     Poly.Cookie12, Poly.Cookie6,
                 ) { go(Screen.Look, it) }
             }
