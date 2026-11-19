@@ -5,6 +5,9 @@
     <string name="w_examples">Kanji examples</string>
     <string name="w_countdown_brutal">Countdown · Swiss</string>
     <string name="w_countdown_shape">Countdown · Shape</string>
+    <string name="w_countdown_giant">Countdown · Giant</string>
+    <string name="w_tithi_editorial">Panchang · Editorial</string>
+    <string name="w_kanji_giant">Kanji · Giant</string>
     <string name="w_music_depth">Music · Depth</string>
     <string name="w_music_frame">Music · Frame</string>
     <string name="w_music_round">Music · Round</string>
@@ -18,6 +21,9 @@
     <string name="d_kanji">Kanji of the day. Tap to watch the stroke order; tap the level to change it</string>
     <string name="d_examples">Ten example words for the day\'s kanji. Tap to step through</string>
     <string name="d_countdown_brutal">Swiss-editorial countdown with a progress readout</string>
+    <string name="d_countdown_giant">The days left as one huge number, with the elapsed span as a rule</string>
+    <string name="d_tithi_editorial">Today\'s tithi number as the headline; tithi, month and end time beneath</string>
+    <string name="d_kanji_giant">The kanji of the day, far larger than the tile and cropped by it. Tap to look it up</string>
     <string name="d_countdown_shape">A random Material 3 shape that fills as the date nears</string>
     <string name="d_music_depth">Now playing with the title behind a cut-out of the cover subject</string>
     <string name="d_music_frame">Cover art in a changing Material 3 shape, wavy progress and controls</string>
