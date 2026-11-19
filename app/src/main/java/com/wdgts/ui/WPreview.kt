@@ -59,6 +59,9 @@ import com.wdgts.music.MusicFrameWidget
 import com.wdgts.music.MusicRoundWidget
 import com.wdgts.sports.TeamWidget
 import com.wdgts.widgets.CountdownBrutalWidget
+import com.wdgts.widgets.CountdownGiantWidget
+import com.wdgts.widgets.KanjiGiantWidget
+import com.wdgts.widgets.TithiEditorialWidget
 import com.wdgts.widgets.CountdownShapeWidget
 import com.wdgts.widgets.ExamplesWidget
 import com.wdgts.widgets.KanjiWidget
@@ -108,6 +111,9 @@ object Kinds {
     val Examples = WidgetKind("examples", "Kanji examples", "WORDS", "2×2", ExamplesWidget::class.java, 156, 156) { c, w, h -> ExamplesWidget.preview(c, w, h) }
     val CountdownSwiss = WidgetKind("cd_swiss", "Countdown · Swiss", "SWISS", "2×2", CountdownBrutalWidget::class.java, 156, 156) { c, w, h -> CountdownBrutalWidget().preview(c, w, h) }
     val CountdownShape = WidgetKind("cd_shape", "Countdown · Shape", "SHAPE", "2×2", CountdownShapeWidget::class.java, 156, 156) { c, w, h -> CountdownShapeWidget().preview(c, w, h) }
+    val CountdownGiant = WidgetKind("cd_giant", "Countdown · Giant", "GIANT", "2×2", CountdownGiantWidget::class.java, 156, 156) { c, w, h -> CountdownGiantWidget().preview(c, w, h) }
+    val TithiEditorial = WidgetKind("tithi_editorial", "Panchang · Editorial", "EDITORIAL", "2×2", TithiEditorialWidget::class.java, 156, 156) { c, w, h -> TithiEditorialWidget().preview(c, w, h) }
+    val KanjiGiant = WidgetKind("kanji_giant", "Kanji · Giant", "GIANT", "2×2", KanjiGiantWidget::class.java, 156, 156) { c, w, h -> KanjiGiantWidget().preview(c, w, h) }
     val MusicDepth = WidgetKind("music_depth", "Music · Depth", "DEPTH", "2×2", MusicDepthWidget::class.java, 156, 156) { c, w, h -> MusicDepthWidget().preview(c, w, h) }
     val MusicFrame = WidgetKind("music_frame", "Music · Frame", "FRAME", "2×2", MusicFrameWidget::class.java, 156, 156) { c, w, h -> MusicFrameWidget().preview(c, w, h) }
     val MusicRound = WidgetKind("music_round", "Music · Round", "ROUND", "2×2", MusicRoundWidget::class.java, 156, 156) { c, w, h -> MusicRoundWidget().preview(c, w, h) }
@@ -117,7 +123,7 @@ object Kinds {
     val WikiBody = WidgetKind("wiki_body", "Wikipedia text", "TEXT", "2×2", WikiBodyWidget::class.java, 156, 156) { c, w, h -> WikiBodyWidget().preview(c, w, h) }
 
     /** Gallery order. */
-    val all = listOf(Hud, Tithi, Streaks, CountdownSwiss, CountdownShape, MusicDepth, MusicFrame, MusicRound, Team, F1, Kanji, Examples, Wiki, WikiBody)
+    val all = listOf(Hud, Tithi, TithiEditorial, Streaks, CountdownSwiss, CountdownShape, CountdownGiant, MusicDepth, MusicFrame, MusicRound, Team, F1, Kanji, KanjiGiant, Examples, Wiki, WikiBody)
 }
 
 /** The widget's picture, scaled to fit the space it is given (keeps the widget's own proportions). */
