@@ -94,6 +94,30 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/countdown_shape_widget_info" />
         </receiver>
 
+        <receiver android:name=".widgets.CountdownGiantWidget" android:exported="true" android:label="@string/w_countdown_giant">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/countdown_giant_widget_info" />
+        </receiver>
+
+        <receiver android:name=".widgets.TithiEditorialWidget" android:exported="true" android:label="@string/w_tithi_editorial">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/tithi_editorial_widget_info" />
+        </receiver>
+
+        <receiver android:name=".widgets.KanjiGiantWidget" android:exported="true" android:label="@string/w_kanji_giant">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/kanji_giant_widget_info" />
+        </receiver>
+
         <receiver android:name=".music.MusicDepthWidget" android:exported="true" android:label="@string/w_music_depth">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/music_depth_widget_info" />
