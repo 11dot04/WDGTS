@@ -17,6 +17,7 @@ fun BroadcastReceiver.async(block: () -> Unit) {
 fun refreshKanjiWidgets(c: Context) {
     KanjiWidget.refreshAll(c)
     ExamplesWidget.refreshAll(c)
+    KanjiGiantWidget().refreshAll(c)
 }
 
 fun refreshEverything(c: Context) {
@@ -25,6 +26,8 @@ fun refreshEverything(c: Context) {
     refreshKanjiWidgets(c)
     CountdownBrutalWidget().refreshAll(c)
     CountdownShapeWidget().refreshAll(c)
+    CountdownGiantWidget().refreshAll(c)
+    TithiEditorialWidget().refreshAll(c)
     MusicWidgets.refreshAll(c)
     TeamWidget().refreshAll(c)
     F1Widget().refreshAll(c)
