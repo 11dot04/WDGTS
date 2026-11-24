@@ -187,6 +187,12 @@ class HudRenderer(
                 knockout(c, shape, t.text, x, cy, w, ph, u, ink, centered = true)
             }
             is Bubble -> knockout(c, bubble(x, cy - ph / 2f, w, u), t.word, x, cy, w, ph, u, ink, centered = false)
+            is ScorePill -> {
+                val shape = Path().apply {
+                    addRoundRect(RectF(x, cy - ph / 2f, x + w, cy + ph / 2f), ph / 2f, ph / 2f, Path.Direction.CW)
+                }
+                knockout(c, shape, t.text, x, cy, w, ph, u, ink, centered = true)
+            }
             is MonthPill -> outline(c, t.text, x, cy, w, u, ink)
             is OutlinePill -> outline(c, t.text, x, cy, w, u, ink)
             is CountRing -> outline(c, t.text, x, cy, w, u, ink)

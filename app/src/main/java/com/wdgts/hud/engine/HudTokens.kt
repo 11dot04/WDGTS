@@ -59,6 +59,9 @@ data class NumeralPill(val text: String, override val tap: TapRef? = null) : Tok
 /** Outlined pill, fixed width, 3 characters (the month). */
 data class MonthPill(val text: String, override val tap: TapRef? = null) : Token
 
+/** Filled stadium sized to its text with the text knocked out: the match minute between the scores (67'), or the kickoff time. */
+data class ScorePill(val text: String, override val tap: TapRef? = null) : Token
+
 /** Outlined pill sized to its text (chips such as IG 1, SMS 14). */
 data class OutlinePill(val text: String, override val tap: TapRef? = null) : Token
 

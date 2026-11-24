@@ -14,6 +14,7 @@ class FlowLayout(
         is NumeralPill -> Hud.NUMERAL_W
         is MonthPill -> Hud.MONTH_W
         is OutlinePill -> m.pill(t.text) + 2 * Hud.OUTLINE_PAD
+        is ScorePill -> m.pill(t.text) + 2 * Hud.OUTLINE_PAD
         is Bubble -> Hud.BUBBLE_PAD_L + m.pill(t.word) + Hud.BUBBLE_PAD_R
         is GlyphToken -> glyphSize(t.glyph).first
         is Chip -> Hud.CHIP_PAD_L + Hud.CHIP_ICON + Hud.CHIP_GAP + m.pill(t.text) + Hud.CHIP_PAD_R

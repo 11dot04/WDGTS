@@ -18,6 +18,20 @@ object HudRules {
      * Finger counting for countdowns, only up to ten (two hands): remainder first, then fives (7 -> 2,5; 10 -> 5,5).
      * Above ten nothing is shown and only the number carries the time.
      */
+    /** The text inside the bracket: 7MIN, 45MIN, 2H, 1H 05M. The same everywhere a time is counted down. */
+    fun timerText(minutes: Int): String {
+        val m = minutes.coerceAtLeast(1)
+        return when {
+            m < 60 -> "${m}MIN"
+            m % 60 == 0 -> "${m / 60}H"
+            else -> "${m / 60}H ${"%02d".format(m % 60)}M"
+        }
+    }
+
+    /** Every countdown on the HUD: the hands up to ten minutes (7 = peace sign + open hand), then the bracket with the time. */
+    fun countdownTokens(minutes: Int, tap: TapRef? = null): List<Token> =
+        hands(minutes).map<HudGlyph, Token> { GlyphToken(it, tap) } + Timer(timerText(minutes), tap)
+
     fun hands(n: Int, maxHands: Int = 2): List<HudGlyph> {
         if (n <= 0 || n > 10) return emptyList()
         val parts = ArrayList<Int>()
