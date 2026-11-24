@@ -74,6 +74,8 @@ dependencies {
     // HUD: Smartspacer targets. The SDK is built with Kotlin 2.4, so the build's Kotlin must be 2.4.0 too.
     implementation("com.kieronquinn.smartspacer:sdk-client:1.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    // HUD steps from Health Connect (the optional source next to the phone's own step sensor)
+    implementation("androidx.health.connect:connect-client:1.1.0")
     testImplementation("junit:junit:4.13.2") // only for the HUD logic test
     // ML Kit subject segmentation (via Google Play services) for the depth-effect music widget
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
