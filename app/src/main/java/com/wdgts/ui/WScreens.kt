@@ -42,11 +42,16 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
+import androidx.health.connect.client.PermissionController
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.wdgts.core.Prefs
 import com.wdgts.f1.F1Widget
+import com.wdgts.hud.Aqi
+import com.wdgts.hud.HudFootball
+import com.wdgts.hud.HudHealth
+import com.wdgts.hud.HudMock
 import com.wdgts.hud.HudNative
 import com.wdgts.hud.HudNativePrefs
 import com.wdgts.hud.HudPrefs
@@ -76,7 +81,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { Home, Hud, ChipApps, HudComplications, Panchang, Streaks, Countdown, Sports, Music, Study, Wiki, Gallery, Connections, Look }
+enum class Screen { Home, Hud, ChipApps, HudComplications, HudTest, Panchang, Streaks, Countdown, Sports, Music, Study, Wiki, Gallery, Connections, Look }
 
 /** First run shows the intro; after that, the home screen and the screens behind it. [ssTick] bumps when Smartspacer's permission dialog returns. */
 @Composable
@@ -112,7 +117,8 @@ private fun Navigator(ssTick: Int) {
             Screen.Home -> WHome(open)
             Screen.Hud -> HudScreen(home, go)
             Screen.ChipApps -> ChipAppsScreen { screen = Screen.Hud }
-            Screen.HudComplications -> HudComplicationsScreen { screen = Screen.Hud }
+            Screen.HudComplications -> HudComplicationsScreen({ screen = Screen.Hud }, { screen = it })
+            Screen.HudTest -> HudTestScreen { screen = Screen.Hud }
             Screen.Panchang -> PanchangScreen(home)
             Screen.Streaks -> StreaksScreen(home)
             Screen.Countdown -> CountdownScreen(home)
@@ -153,7 +159,12 @@ private fun HudScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
         WTitle("HUD")
         WCaption("The date line, then up to three lines (a 4x1 shows two)")
 
-        WPlate("Data source", "Smartspacer costs some battery. Without it the HUD uses the app's own sources and loses only what Smartspacer reads from other widgets (At a Glance, Google Home).", count = 3) {
+        WLabel("Content")
+        WCard(
+            "Data source",
+            "Smartspacer costs some battery. Without it the HUD loses only what Smartspacer reads from other widgets (At a Glance, Google Home).",
+            on = null,
+        ) {
             WPick(listOf("Smartspacer and the app's own sources", "The app's own sources only", "Smartspacer only"), source) {
                 source = it; HudPrefs.setSource(c, it)
                 if (HudPrefs.usesSmartspacer(c)) HudSmartspacerSource.start(c.applicationContext) { HudWidget().refreshAll(c.applicationContext) }
@@ -161,52 +172,54 @@ private fun HudScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
                 refresh()
             }
         }
-        WPlate("Edge padding", "The air between the text and the widget's edge.", count = 3) {
-            WPick(listOf("Tight", "Normal", "Roomy"), edge) { edge = it; HudPrefs.setEdge(c, it); refresh() }
-        }
-        WPlate("Date line", "Between the month and the time. The Nothing clock puts a time-zone burst there.", count = 4) {
-            WPick(
-                listOf("Nothing", "Sun or moon (day / night)", "Time zone, always", "Time zone, only away from home"), badge,
-            ) { badge = it; HudPrefs.setBadgeMode(c, it); refresh() }
-        }
         WBlock(
-            "Day and night",
+            "What it shows",
             listOf(
-                WItem("Switch at sunrise and sunset", "Instead of 06:00 and 18:00.", bySun, {
-                    bySun = it; HudPrefs.setDayNightBySun(c, it); refresh()
-                }),
+                WItem("Complications", "Sunrise and sunset, birthdays, bedtime, steps, air quality, rain, events, football: when each one shows.", onClick = { go(Screen.HudComplications) }),
+                WItem("Try them with sample data", "See any complication on the HUD without waiting for it.", onClick = { go(Screen.HudTest) }),
+                WItem("Apps that get a notification chip", "Messaging apps, counts and missed calls.", onClick = { go(Screen.ChipApps) }),
             ),
         )
-        WPlate("Now playing style", "One line when it fits, otherwise the artist goes under the title.", count = 6) {
-            WPick(
-                listOf(
-                    "Vary by track", "Title, then artist", "TITLE (BY) ARTIST + rings", "TITLE © [ARTIST]",
-                    "TITLE + progress rings + ARTIST", "TITLE + album-art strip + ARTIST",
-                ),
-                layout,
-            ) { layout = it; HudPrefs.setMusicLayout(c, it); refresh() }
+
+        WLabel("Layout")
+        WCard("Edge padding", "The air between the text and the widget's edge. Auto goes tight where the launcher already pads the widget (2 rows or taller).", on = null) {
+            WPick(listOf("Tight", "Normal", "Roomy", "Auto"), edge) { edge = it; HudPrefs.setEdge(c, it); refresh() }
         }
-        WPlate("Now playing button", count = 3) {
-            WPick(listOf("Arrow (opens the player)", "Pause pill", "Cassette pill (pause)"), control) {
-                control = it; HudPrefs.setMusicControl(c, it); refresh()
+        WCard("Date line", "Between the month and the time. The Nothing clock puts a time-zone burst there.", on = null) {
+            WPick(listOf("Nothing", "Sun or moon (day / night)", "Time zone, always", "Time zone, only away from home"), badge) {
+                badge = it; HudPrefs.setBadgeMode(c, it); refresh()
+            }
+            WSetting("Day and night", "Switch the sun and moon glyph at sunrise and sunset instead of 06:00 and 18:00.") {
+                WChips(listOf("At 06:00 and 18:00", "At sunrise and sunset"), if (bySun) 1 else 0) { bySun = it == 1; HudPrefs.setDayNightBySun(c, bySun); refresh() }
             }
         }
         WBlock(
             "Look",
             listOf(
-                WItem("Fill the widget", "Scale the text up to the space the launcher gives it.", fill, {
-                    fill = it; HudPrefs.setFill(c, it); refresh()
-                }),
-                WItem("Material You accents", "On the date numeral, the weather bubble and the action pills.", you, {
-                    you = it; HudPrefs.setMaterialYou(c, it); refresh()
-                }),
+                WItem("Fill the widget", "Scale the text up to the space the launcher gives it.", fill, { fill = it; HudPrefs.setFill(c, it); refresh() }),
+                WItem("Material You accents", "On the date numeral, the weather bubble and the action pills.", you, { you = it; HudPrefs.setMaterialYou(c, it); refresh() }),
             ),
         )
+
+        WLabel("Now playing")
+        WCard("Music line", "One line when it fits, otherwise the artist goes under the title.", on = null) {
+            WSetting("Style") {
+                WPick(
+                    listOf(
+                        "Vary by track", "Title, then artist", "TITLE (BY) ARTIST + rings", "TITLE © [ARTIST]",
+                        "TITLE + progress rings + ARTIST", "TITLE + album-art strip + ARTIST",
+                    ),
+                    layout,
+                ) { layout = it; HudPrefs.setMusicLayout(c, it); refresh() }
+            }
+            WSetting("Button") {
+                WPick(listOf("Arrow (opens the player)", "Pause pill", "Cassette pill (pause)"), control) { control = it; HudPrefs.setMusicControl(c, it); refresh() }
+            }
+        }
+
         WBlock(
-            "Sources",
+            "Debug",
             listOf(
-                WItem("Complications", "Sunrise and sunset, birthdays, bedtime, steps, air quality, rain, events: when each one shows.", onClick = { go(Screen.HudComplications) }),
-                WItem("Apps that get a notification chip", "Messaging apps, counts and missed calls.", onClick = { go(Screen.ChipApps) }),
                 WItem("Smartspacer and permissions", "Access, status and the debug dump.", onClick = { go(Screen.Connections) }),
                 WItem("Copy charging info", "For debugging.", onClick = { copy(c, "Charging info", HudSources.chargingDump(c)) }),
                 WItem("Show widget bounds", "A thin red outline at the edge of the HUD's picture, to see where the launcher leaves a margin.", bounds, {
@@ -222,13 +235,13 @@ private fun HudScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
 private fun HudNumber(label: String, key: String, def: Int, values: List<Int>, show: (Int) -> String, hint: String? = null, onDone: () -> Unit) {
     val c = LocalContext.current
     var v by remember { mutableIntStateOf(HudNativePrefs.num(c, key, def)) }
-    WPlate(label, hint) {
+    WSetting(label, hint) {
         WChips(values.map(show), values.indexOf(v).coerceAtLeast(0)) { v = values[it]; HudNativePrefs.setNum(c, key, v); onDone() }
     }
 }
 
 @Composable
-private fun HudComplicationsScreen(onBack: () -> Unit) {
+private fun HudComplicationsScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
     val c = LocalContext.current
     fun refresh() { HudWidget().refreshAll(c.applicationContext); HudNative.armEdges(c.applicationContext); Preview.bump() }
     fun flag(key: String, def: Boolean) = HudNativePrefs.flag(c, key, def)
@@ -240,49 +253,124 @@ private fun HudComplicationsScreen(onBack: () -> Unit) {
     var event by remember { mutableStateOf(flag(HudNativePrefs.EVENT, true)) }
     var alarm by remember { mutableStateOf(flag(HudNativePrefs.ALARM, true)) }
     var bed by remember { mutableIntStateOf(HudNativePrefs.num(c, HudNativePrefs.BED_MODE, 0)) }
+    var foot by remember { mutableStateOf(flag(HudFootball.FOOT, true)) }
+    var crest by remember { mutableIntStateOf(HudNativePrefs.num(c, HudFootball.FOOT_CREST, HudFootball.CREST_MONO)) }
+    var stepsSrc by remember { mutableIntStateOf(HudNativePrefs.num(c, HudNativePrefs.STEPS_SRC, 0)) }
+    var aqiScale by remember { mutableIntStateOf(HudNativePrefs.num(c, HudNativePrefs.AQI_SCALE, Aqi.US)) }
+    var hcGranted by remember { mutableStateOf(false) }
+    val hcAsk = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) {
+        hcGranted = it.contains(HudHealth.STEPS_PERMISSION)
+        refresh()
+    }
+    LaunchedEffect(stepsSrc) {
+        if (stepsSrc == 1) hcGranted = withContext(Dispatchers.IO) { HudHealth.granted(c) }.contains(HudHealth.STEPS_PERMISSION)
+    }
     val min = { m: Int -> "$m min" }
     val clock = { m: Int -> "%02d:%02d".format(m / 60, m % 60) }
 
     WSubFrame(onBack, pinned = { PreviewStage(listOf(Kinds.Hud)) }) {
         WTitle("Complications")
-        WCaption("Each one appears only while it is relevant and then leaves, so the space goes to something else. Used when the data source includes the app's own sources.")
+        WCaption("Each one appears only while it is relevant, then leaves so the space goes to something else")
+        WButton("Try them with sample data", { go(Screen.HudTest) }, filled = false)
 
-        WBlock("Sunrise and sunset", listOf(WItem("Show them", "SUNSET IN 20 MIN, then the time until the window closes.", sun, { sun = it; HudNativePrefs.setFlag(c, HudNativePrefs.SUN, it); refresh() })))
-        HudNumber("Starts before", HudNativePrefs.SUN_BEFORE, 30, listOf(15, 30, 45, 60), min) { refresh() }
-        HudNumber("Stays after", HudNativePrefs.SUN_AFTER, 15, listOf(0, 15, 30), min) { refresh() }
-
-        WBlock("Birthdays", listOf(WItem("Show them", "From midnight, from the Birthdays calendar. A tap dismisses it for the day.", bday, { bday = it; HudNativePrefs.setFlag(c, HudNativePrefs.BDAY, it); refresh() })))
-        HudNumber("Until", HudNativePrefs.BDAY_END, 9, listOf(8, 9, 10, 12), { "%02d:00".format(it) }) { refresh() }
-
-        WPlate("Bedtime", "Digital Wellbeing's bedtime is read through Do Not Disturb access; the set time is the fallback.", count = 3) {
-            WPick(listOf("Off", "A set time", "Follow Digital Wellbeing"), bed) { bed = it; HudNativePrefs.setNum(c, HudNativePrefs.BED_MODE, it); refresh() }
+        WLabel("On the clock")
+        WCard("Sunrise and sunset", "SUNSET IN 20 MIN, then the time until the window closes.", sun, { sun = it; HudNativePrefs.setFlag(c, HudNativePrefs.SUN, it); refresh() }) {
+            HudNumber("Starts before", HudNativePrefs.SUN_BEFORE, 30, listOf(15, 30, 45, 60), min) { refresh() }
+            HudNumber("Stays after", HudNativePrefs.SUN_AFTER, 15, listOf(0, 15, 30), min) { refresh() }
         }
-        if (bed != 0) {
-            HudNumber("Bedtime", HudNativePrefs.BED_MIN, 23 * 60, listOf(21 * 60, 21 * 60 + 30, 22 * 60, 22 * 60 + 30, 23 * 60, 23 * 60 + 30), clock) { refresh() }
+        WCard("Bedtime", "BEDTIME IN 25 MIN, until the time you go to bed.", bed != 0, {
+            bed = if (it) 1 else 0; HudNativePrefs.setNum(c, HudNativePrefs.BED_MODE, bed); refresh()
+        }) {
+            WSetting("Bedtime comes from", "Digital Wellbeing's bedtime is read through Do Not Disturb access; the set time is the fallback.") {
+                WChips(listOf("A set time", "Digital Wellbeing"), (bed - 1).coerceAtLeast(0)) { bed = it + 1; HudNativePrefs.setNum(c, HudNativePrefs.BED_MODE, bed); refresh() }
+            }
+            HudNumber("Set time", HudNativePrefs.BED_MIN, 23 * 60, listOf(21 * 60, 21 * 60 + 30, 22 * 60, 22 * 60 + 30, 23 * 60, 23 * 60 + 30), clock) { refresh() }
             HudNumber("Starts before", HudNativePrefs.BED_LEAD, 30, listOf(15, 30, 45, 60), min) { refresh() }
-            WBlock("Bedtime", listOf(WItem("Copy bedtime info", "For debugging the Digital Wellbeing sync.", onClick = { copy(c, "Bedtime info", HudNative.bedtimeDump(c)) })))
+            WButton("Copy bedtime info", { copy(c, "Bedtime info", HudNative.bedtimeDump(c)) }, filled = false)
+        }
+        WCard("Next event", "From the calendar. Ambient until ten minutes before, then urgent.", event, { event = it; HudNativePrefs.setFlag(c, HudNativePrefs.EVENT, it); refresh() }) {
+            HudNumber("Starts before", HudNativePrefs.EVENT_LEAD, 60, listOf(30, 60, 90, 120), min) { refresh() }
+        }
+        WCard("Alarm", "ALARM IN 1H 20M before the next alarm clock.", alarm, { alarm = it; HudNativePrefs.setFlag(c, HudNativePrefs.ALARM, it); refresh() }) {
+            HudNumber("Starts before", HudNativePrefs.ALARM_LEAD, 120, listOf(60, 120, 240), min) { refresh() }
         }
 
-        WBlock("Steps", listOf(WItem("Show them", "Counted by the phone. Needs the physical activity permission (Smartspacer and permissions).", steps, { steps = it; HudNativePrefs.setFlag(c, HudNativePrefs.STEPS, it); refresh() })))
-        HudNumber("Goal", HudNativePrefs.STEPS_GOAL, 10_000, listOf(6_000, 8_000, 10_000, 12_000), { "%,d".format(it) }) { refresh() }
+        WLabel("People and play")
+        WCard("Birthdays", "From midnight, from the Birthdays calendar. A tap dismisses it for the day.", bday, { bday = it; HudNativePrefs.setFlag(c, HudNativePrefs.BDAY, it); refresh() }) {
+            HudNumber("Until", HudNativePrefs.BDAY_END, 9, listOf(8, 9, 10, 12), { "%02d:00".format(it) }) { refresh() }
+        }
+        WCard(
+            "Football", "ARS 2 (67') 1 CHE for the team set in the Team widget. A live match is urgent.", foot,
+            {
+                foot = it; HudNativePrefs.setFlag(c, HudFootball.FOOT, it)
+                kotlin.concurrent.thread { HudFootball.sync(c.applicationContext); HudWidget().refreshAll(c.applicationContext) }
+                refresh()
+            },
+        ) {
+            WSetting("Crests", "The first thing to go when the line gets too long.") {
+                WChips(listOf("None", "Colour", "Mono", "In a ring"), crest) { crest = it; HudNativePrefs.setNum(c, HudFootball.FOOT_CREST, it); refresh() }
+            }
+            HudNumber("Starts before kickoff", HudFootball.FOOT_BEFORE, 180, listOf(60, 120, 180, 240), min) { refresh() }
+            HudNumber("Stays after full time", HudFootball.FOOT_AFTER, 180, listOf(60, 180, 360), min) { refresh() }
+        }
 
-        WBlock("Air quality", listOf(WItem("Show it when high", "A mask and the index, only above the threshold.", aqi, { aqi = it; HudNativePrefs.setFlag(c, HudNativePrefs.AQI, it); refresh() })))
-        HudNumber("Threshold (US AQI)", HudNativePrefs.AQI_THR, 150, listOf(100, 150, 200, 300), { "$it" }) { refresh() }
-        HudNumber("Leaves when it drops by", HudNativePrefs.AQI_MARGIN, 5, listOf(0, 5, 10, 20), { "$it" }, "Keeps it from flickering around the threshold.") { refresh() }
+        WLabel("Body and air")
+        WCard("Steps", "A shoe, the count, and a thumbs up once the goal is reached.", steps, { steps = it; HudNativePrefs.setFlag(c, HudNativePrefs.STEPS, it); refresh() }) {
+            HudNumber("Goal", HudNativePrefs.STEPS_GOAL, 10_000, listOf(6_000, 8_000, 10_000, 12_000), { "%,d".format(it) }) { refresh() }
+            WSetting("Counted by", "The phone's step sensor needs no account. Health Connect matches your watch or Google Fit.") {
+                WChips(listOf("This phone", "Health Connect"), stepsSrc) { stepsSrc = it; HudNativePrefs.setNum(c, HudNativePrefs.STEPS_SRC, it); refresh() }
+            }
+            if (stepsSrc == 1) {
+                WButton(
+                    if (hcGranted) "Health Connect: allowed" else if (HudHealth.available(c)) "Allow Health Connect" else "Health Connect is not available",
+                    { if (HudHealth.available(c)) hcAsk.launch(HudHealth.PERMISSIONS) },
+                    filled = !hcGranted,
+                )
+            }
+        }
+        WCard("Air quality", "A mask and the index, only while it is high.", aqi, { aqi = it; HudNativePrefs.setFlag(c, HudNativePrefs.AQI, it); refresh() }) {
+            WSetting("Scale", "India's index is worked out from 24 hours of PM2.5 and PM10, as the CPCB defines it.") {
+                WChips(listOf("US AQI", "India (national AQI)"), aqiScale) { aqiScale = it; HudNativePrefs.setNum(c, HudNativePrefs.AQI_SCALE, it); refresh() }
+            }
+            if (aqiScale == Aqi.US) HudNumber("Shows from", HudNativePrefs.AQI_THR, 150, listOf(100, 150, 200, 300), { "$it" }) { refresh() }
+            else HudNumber("Shows from", HudNativePrefs.AQI_THR_IN, 200, listOf(100, 200, 300, 400), { "$it" }) { refresh() }
+            HudNumber("Leaves when it drops by", HudNativePrefs.AQI_MARGIN, 5, listOf(0, 5, 10, 20), { "$it" }, "Keeps it from flickering around the limit.") { refresh() }
+        }
+        WCard("Rain soon", "RAIN IN 20 MIN when rain is on its way and it is not raining yet.", rain, { rain = it; HudNativePrefs.setFlag(c, HudNativePrefs.RAIN, it); refresh() }) {
+            HudNumber("Looks ahead", HudNativePrefs.RAIN_WIN, 60, listOf(30, 60, 90, 120), min) { refresh() }
+        }
 
-        WBlock("Rain soon", listOf(WItem("Show it", "RAIN IN 20 MIN when rain is on its way and it is not raining yet.", rain, { rain = it; HudNativePrefs.setFlag(c, HudNativePrefs.RAIN, it); refresh() })))
-        HudNumber("Looks ahead", HudNativePrefs.RAIN_WIN, 60, listOf(30, 60, 90, 120), min) { refresh() }
+        WLabel("Behaviour")
+        WCard("Ambient items", "Steps, countdowns and the alarm step aside after a few unlocks and come back when they change.", on = null) {
+            HudNumber("Step aside after", HudNativePrefs.SEEN_N, 3, listOf(0, 1, 3, 5), { if (it == 0) "Never" else "$it unlocks" }) { refresh() }
+        }
+    }
+}
 
-        WBlock("Next event", listOf(WItem("Show it", "From the calendar. Ambient until ten minutes before, then urgent.", event, { event = it; HudNativePrefs.setFlag(c, HudNativePrefs.EVENT, it); refresh() })))
-        HudNumber("Starts before", HudNativePrefs.EVENT_LEAD, 60, listOf(30, 60, 90, 120), min) { refresh() }
-
-        WBlock("Alarm", listOf(WItem("Show it", "ALARM IN 1H 20M before the next alarm clock.", alarm, { alarm = it; HudNativePrefs.setFlag(c, HudNativePrefs.ALARM, it); refresh() })))
-        HudNumber("Starts before", HudNativePrefs.ALARM_LEAD, 120, listOf(60, 120, 240), min) { refresh() }
-
-        HudNumber(
-            "Ambient items step aside after", HudNativePrefs.SEEN_N, 3, listOf(0, 1, 3, 5), { if (it == 0) "Never" else "$it unlocks" },
-            "Steps, countdowns and the alarm drop away after this many unlocks and come back when they change.",
-        ) { refresh() }
+/** Puts one sample complication on the HUD (preview and home screen) for ten minutes, to check its look. */
+@Composable
+private fun HudTestScreen(onBack: () -> Unit) {
+    val c = LocalContext.current
+    var active by remember { mutableStateOf(HudMock.current(c)) }
+    LaunchedEffect(active) {            // the crests of a football sample arrive a moment after the sample itself
+        delay(1500); Preview.bump()
+        delay(2500); Preview.bump()
+    }
+    WSubFrame(onBack, pinned = { PreviewStage(listOf(Kinds.Hud)) }) {
+        WTitle("Test")
+        WCaption("Sample data on the HUD for ten minutes, then it goes by itself")
+        if (active != null) {
+            WButton("Stop the sample", { HudMock.set(c, null); active = null; Preview.bump() })
+        }
+        for (g in HudMock.GROUPS) {
+            WPlate(g.title) {
+                WChips(g.cases.map { it.label }, g.cases.indexOfFirst { it.id == active }) { i ->
+                    val id = g.cases[i].id
+                    if (active == id) { HudMock.set(c, null); active = null } else { HudMock.set(c, id); active = id }
+                    Preview.bump()
+                }
+            }
+        }
     }
 }
 

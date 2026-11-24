@@ -515,6 +515,53 @@ fun WPlate(label: String? = null, hint: String? = null, count: Int? = null, cont
     }
 }
 
+/**
+ * One feature with its own switch and, while it is on, its settings underneath. Off, it is only the header, so a long
+ * list of features stays short. [on] == null makes a card that is always open and has no switch.
+ */
+@Composable
+fun WCard(
+    title: String, sub: String?, on: Boolean?, onToggle: (Boolean) -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val p = LocalW.current
+    val view = LocalView.current
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(p.surface).animateContentSizeIfMotion(),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .then(if (on != null) Modifier.clickable { view.tick(); onToggle(!on) } else Modifier)
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f).padding(end = 14.dp)) {
+                Text(title, style = wBody(17, 700))
+                if (sub != null) Text(sub, style = wBody(13, 500, p.soft, 18))
+            }
+            if (on != null) WSwitch(on, onToggle)
+        }
+        if (on != false) {
+            Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(p.outline))
+                content()
+            }
+        }
+    }
+}
+
+/** One setting inside a [WCard]: a mono caps label, the control, and an optional line of explanation. */
+@Composable
+fun WSetting(label: String, hint: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    val p = LocalW.current
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label.uppercase(), style = wMono(10, p.soft, FontWeight.Bold, 1.4f))
+        content()
+        if (hint != null) Text(hint, style = wBody(12, 500, p.soft, 16))
+    }
+}
+
 /** One option of a small set: pill outline when off, filled accent when picked. */
 @Composable
 fun WChip(text: String, selected: Boolean, onClick: () -> Unit) {
