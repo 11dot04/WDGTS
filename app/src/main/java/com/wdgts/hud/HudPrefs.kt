@@ -60,14 +60,21 @@ object HudPrefs {
     const val EDGE_TIGHT = 0
     const val EDGE_NORMAL = 1
     const val EDGE_ROOMY = 2
+    const val EDGE_AUTO = 3
 
-    /** How much air the HUD leaves around its text: tight, normal or roomy. */
-    fun edge(c: Context) = sp(c).getInt("edge", EDGE_NORMAL)
+    /** How much air the HUD leaves around its text: tight, normal, roomy, or automatic (tight where the launcher adds its own padding). */
+    fun edge(c: Context) = sp(c).getInt("edge", EDGE_AUTO)
     fun setEdge(c: Context, v: Int) = sp(c).edit().putInt("edge", v).apply()
 
     /** Puts the chosen padding into [com.wdgts.hud.engine.Hud] so sizing, drawing and tap zones all use the same numbers. */
-    fun syncGeometry(c: Context) {
-        when (edge(c)) {
+    fun syncGeometry(c: Context, heightPx: Int? = null) {
+        var mode = edge(c)
+        if (mode == EDGE_AUTO) {
+            // launchers pad a widget that is two rows tall or more, and leave a one-row widget alone
+            if (heightPx == null) return
+            mode = if (heightPx > 100 * c.resources.displayMetrics.density) EDGE_TIGHT else EDGE_NORMAL
+        }
+        when (mode) {
             EDGE_TIGHT -> { com.wdgts.hud.engine.Hud.PAD_H = 1.2f; com.wdgts.hud.engine.Hud.PAD_V = 1.6f }
             EDGE_ROOMY -> { com.wdgts.hud.engine.Hud.PAD_H = 3f; com.wdgts.hud.engine.Hud.PAD_V = 4f }
             else -> { com.wdgts.hud.engine.Hud.PAD_H = 2f; com.wdgts.hud.engine.Hud.PAD_V = 2.8f }

@@ -57,6 +57,7 @@ object HudSources {
     const val DRIK = "DRIK"
     const val MUSIC_TOGGLE = "MUSIC_TOGGLE"
     const val SETTINGS = "SETTINGS"
+    const val MATCH = "MATCH"
     const val BDAY = "BDAY"
     const val EVENT = "EVENT"
     const val ALARM = "ALARM"
@@ -132,12 +133,11 @@ object HudSources {
         if (left <= 0) return null
         val t = tap(SETTINGS)
         val minutes = ((today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - now) / 60_000L).coerceAtLeast(1)
-        val remaining = if (minutes >= 60) "${minutes / 60}H${if (minutes % 60 > 0) " ${minutes % 60}M" else ""}" else "${minutes}MIN"
         return Block(
             "streaks",
             listOf(
                 listOf(Text("$left STREAK${if (left > 1) "S" else ""} LEFT", t)),
-                listOf(DotRow(done, total, t), Timer(remaining, t)),
+                listOf<Token>(DotRow(done, total, t)) + HudRules.countdownTokens(minutes.toInt(), t),
             ),
         )
     }
@@ -279,8 +279,7 @@ object HudSources {
                  else estimateChargeMs(bm, 80)
         if (ms in 1..(24L * 3_600_000L)) {
             val minutes = (ms / 60_000L).coerceAtLeast(1)
-            val remaining = if (minutes >= 60) "${minutes / 60}H ${"%02d".format(minutes % 60)}M" else "${minutes}MIN"
-            return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text(if (limited) "TO 80% IN" else "FULL IN"), Timer(remaining))))
+            return Block("charging", listOf(listOf<Token>(GlyphToken(HudGlyph.USB_C), Text(if (limited) "TO 80% IN" else "FULL IN")) + HudRules.countdownTokens(minutes.toInt())))
         }
         if (level < 0) return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"))))
         val word = if (chargeLimited(bm) && level >= 80) "HELD AT 80%" else "CHARGING"

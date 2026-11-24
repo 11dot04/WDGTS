@@ -66,10 +66,17 @@ object HudComposer {
         HudSources.chips(c)?.let { ranked += Ranked(2, it.copy(optional = true)) }
         HudSources.charging(c)?.let { ranked += Ranked(3, it.copy(optional = true)) }
 
+        // a sample complication from the test screen goes first, whatever the data source is
+        HudMock.block(c, now, zone)?.let { (cls, b) -> ranked.add(0, Ranked(cls, b)) }
+
         // the app's own sources: each speaks only in its window; Smartspacer's equivalent wins the line when both are on
         if (useNative) {
             val fromSmartspacer = ranked.joinToString(" ") { r -> r.block.segments.flatten().filterIsInstance<Text>().joinToString(" ") { it.text } }.uppercase()
             if (!SUN_WORDS.containsMatchIn(fromSmartspacer)) HudNative.sun(c, now, zone, today)?.let { ranked += Ranked(1, it) }
+            HudFootball.block(c, now, zone)?.let { (cls, b) ->
+                ranked.removeAll { it.block.kind == "sports" }          // Smartspacer's head-to-head card is the same match
+                ranked += Ranked(cls, b)
+            }
             HudNative.birthday(c, now, today, zdt.hour)?.let { ranked += Ranked(1, it) }
             HudNative.bedtime(c, now, zone, today)?.let { ranked += Ranked(1, it) }
             HudNative.aqi(c, now)?.let { ranked += Ranked(1, it) }

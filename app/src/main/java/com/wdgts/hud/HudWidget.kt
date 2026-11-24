@@ -6,6 +6,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -47,7 +49,7 @@ class HudWidget : ImageWidget() {
         super.onUpdate(c, m, ids)
         val app = c.applicationContext
         if (HudPrefs.usesSmartspacer(app)) HudSmartspacerSource.start(app) { HudWidget().refreshAll(app) }
-        async { Weather.refreshIfStale(c); Aqi.refreshIfStale(c); refreshAll(c) }
+        async { Weather.refreshIfStale(c); Aqi.refreshIfStale(c); HudFootball.sync(c); refreshAll(c) }
         Sched.arm(c, HudWidget::class.java, ACTION_TICK, System.currentTimeMillis() + 5 * 60_000L, 70)   // fallback if the listener isn't running
         HudNative.armEdges(c)                                                                              // and the exact moments things start or stop mattering
     }
@@ -58,6 +60,7 @@ class HudWidget : ImageWidget() {
                 refreshAll(c)
                 Sched.arm(c, HudWidget::class.java, ACTION_TICK, System.currentTimeMillis() + 5 * 60_000L, 70)
                 HudNative.armEdges(c)
+                async { if (HudFootball.sync(c)) refreshAll(c) }
             }
             else -> super.onReceive(c, i)
         }
@@ -105,7 +108,7 @@ class HudWidget : ImageWidget() {
     private fun viewId(ctx: Context, name: String) = ctx.resources.getIdentifier(name, "id", ctx.packageName)
 
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
-        HudPrefs.syncGeometry(ctx)
+        HudPrefs.syncGeometry(ctx, h)
         val p = Palette.of(ctx)
         if (CARD) drawColor(p.surface)
         val ink = if (CARD) p.onSurface else Color.WHITE
@@ -120,6 +123,51 @@ class HudWidget : ImageWidget() {
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val coverage = WeakHashMap<Bitmap, Float>()
     private val glyphMasks = HashMap<HudGlyph, Bitmap>()
+    private val crestBitmaps = HashMap<String, Bitmap>()
+    private val crestPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val crestRing = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+
+    /** A team crest: in colour, as a grey-toned copy in the HUD's ink, or in colour inside an outlined ring like the pills. */
+    private fun drawCrest(ctx: Context, c: Canvas, key: CrestKey, x: Float, cy: Float, size: Float, ink: Int) {
+        val bmp = synchronized(crestBitmaps) {
+            crestBitmaps[key.url] ?: com.wdgts.sports.Crest.load(ctx, key.url)?.also {
+                if (crestBitmaps.size > 6) crestBitmaps.clear()
+                crestBitmaps[key.url] = it
+            }
+        } ?: return
+        val cx = x + size / 2f
+        var box = size * 1.25f                                   // a crest reads smaller than a glyph of the same box
+        if (key.mode == HudFootball.CREST_RING) {
+            crestRing.color = ink
+            crestRing.strokeWidth = size * 0.1f
+            val r = size * 0.66f
+            c.drawCircle(cx, cy, r - crestRing.strokeWidth / 2f, crestRing)
+            box = r * 1.2f
+        }
+        val k = box / max(bmp.width, bmp.height)
+        val w = bmp.width * k
+        val h = bmp.height * k
+        crestPaint.colorFilter = if (key.mode == HudFootball.CREST_MONO) monoFilter(ink) else null
+        c.drawBitmap(bmp, null, RectF(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f), crestPaint)
+        crestPaint.colorFilter = null
+    }
+
+    /** Luminance of the crest painted in the ink colour, so it keeps its detail but matches the monochrome HUD. */
+    private fun monoFilter(ink: Int): ColorMatrixColorFilter {
+        val r = Color.red(ink) / 255f
+        val g = Color.green(ink) / 255f
+        val b = Color.blue(ink) / 255f
+        return ColorMatrixColorFilter(
+            ColorMatrix(
+                floatArrayOf(
+                    r * 0.299f, r * 0.587f, r * 0.114f, 0f, 0f,
+                    g * 0.299f, g * 0.587f, g * 0.114f, 0f, 0f,
+                    b * 0.299f, b * 0.587f, b * 0.114f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f,
+                ),
+            ),
+        )
+    }
 
     /** One of the HUD's own glyphs as a white mask cropped to its ink, so it can be tinted or knocked out of a pill like an app icon. */
     private fun glyphMask(ctx: Context, g: HudGlyph): Bitmap? = synchronized(glyphMasks) {
@@ -140,6 +188,10 @@ class HudWidget : ImageWidget() {
 
     /** App icons (monochrome layer) and Smartspacer icons, optically sized; tinted, or cut out of a filled pill. */
     private fun iconPainter(ctx: Context) = IconPainter { key, c, x, cy, size, ink, knock ->
+        if (key is CrestKey) {
+            drawCrest(ctx, c, key, x, cy, size, ink)
+            return@IconPainter
+        }
         val mask: Bitmap = when (key) {
             is AppIconKey -> GlyphMask.forPackage(ctx, key.pkg)
             is SsIconKey -> SmartspacerIcons.get(key)

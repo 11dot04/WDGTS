@@ -64,7 +64,10 @@ object HudNativePrefs {
     const val BED_LEAD = "bed_lead"              // minutes before bedtime
     const val STEPS = "steps_on"
     const val STEPS_GOAL = "steps_goal"
+    const val STEPS_SRC = "steps_src"            // 0 the phone's step sensor, 1 Health Connect
     const val AQI = "aqi_on"
+    const val AQI_SCALE = "aqi_scale"            // 0 US AQI, 1 India's national AQI
+    const val AQI_THR_IN = "aqi_thr_in"
     const val AQI_THR = "aqi_thr"
     const val AQI_MARGIN = "aqi_margin"
     const val AQI_ACTIVE = "aqi_active"
@@ -149,6 +152,10 @@ object HudSteps {
 
     /** Steps so far today, or null without the permission or a step sensor. */
     fun today(c: Context): Int? {
+        if (HudNativePrefs.num(c, HudNativePrefs.STEPS_SRC, 0) == 1) {
+            HudHealth.refreshAsync(c)
+            return HudHealth.cached(c)
+        }
         ensure(c)
         if (!started) return null
         val p = sp(c)
@@ -157,23 +164,66 @@ object HudSteps {
     }
 }
 
-/** Open-Meteo air quality for the Panchang location. The raw PM values are kept for a later India-scale index. */
+/**
+ * Open-Meteo air quality for the Panchang location: the US index as it comes, and India's national AQI (CPCB) worked out
+ * from the last 24 hours of PM2.5 and PM10, which is how the Indian index is defined.
+ */
 object Aqi {
+    const val US = 0
+    const val INDIA = 1
+
+    // concentration low, high, index low, high (CPCB breakpoints, 24-hour average in ug/m3)
+    private val PM25 = arrayOf(
+        doubleArrayOf(0.0, 30.0, 0.0, 50.0), doubleArrayOf(30.0, 60.0, 50.0, 100.0), doubleArrayOf(60.0, 90.0, 100.0, 200.0),
+        doubleArrayOf(90.0, 120.0, 200.0, 300.0), doubleArrayOf(120.0, 250.0, 300.0, 400.0), doubleArrayOf(250.0, 380.0, 400.0, 500.0),
+    )
+    private val PM10 = arrayOf(
+        doubleArrayOf(0.0, 50.0, 0.0, 50.0), doubleArrayOf(50.0, 100.0, 50.0, 100.0), doubleArrayOf(100.0, 250.0, 100.0, 200.0),
+        doubleArrayOf(250.0, 350.0, 200.0, 300.0), doubleArrayOf(350.0, 430.0, 300.0, 400.0), doubleArrayOf(430.0, 510.0, 400.0, 500.0),
+    )
+
+    private fun sub(x: Double, bp: Array<DoubleArray>): Double {
+        for (r in bp) if (x <= r[1]) return r[2] + (r[3] - r[2]) * (x - r[0]) / (r[1] - r[0])
+        return 500.0
+    }
+
+    /** The overall index is the worse of the two sub-indices. */
+    fun naqi(pm25: Double?, pm10: Double?): Int? {
+        val a = pm25?.let { sub(it, PM25) }
+        val b = pm10?.let { sub(it, PM10) }
+        val v = listOfNotNull(a, b).maxOrNull() ?: return null
+        return Math.round(v).toInt()
+    }
+
+    private fun average(o: JSONObject, key: String): Double? {
+        val arr = o.optJSONArray(key) ?: return null
+        var sum = 0.0
+        var n = 0
+        for (i in 0 until arr.length()) if (!arr.isNull(i)) { sum += arr.getDouble(i); n++ }
+        return if (n == 0) null else sum / n
+    }
+
     fun refreshIfStale(c: Context) {
         val at = HudNativePrefs.long(c, "aqi_at", 0L)
-        if (System.currentTimeMillis() - at < 60 * 60_000L) return
+        if (System.currentTimeMillis() - at < 60 * 60_000L && HudNativePrefs.num(c, "aqi_in", -1) >= 0) return
         val txt = Http.get(
-            "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${Prefs.lat(c)}&longitude=${Prefs.lon(c)}&current=us_aqi,pm2_5,pm10",
+            "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${Prefs.lat(c)}&longitude=${Prefs.lon(c)}" +
+                "&current=us_aqi,pm2_5,pm10&hourly=pm2_5,pm10&past_hours=24&forecast_hours=1",
         ) ?: return
         runCatching {
-            val o = JSONObject(txt).getJSONObject("current")
-            if (o.isNull("us_aqi")) return
-            HudNativePrefs.setNum(c, "aqi_v", Math.round(o.getDouble("us_aqi")).toInt())
-            if (!o.isNull("pm2_5")) HudNativePrefs.setFloat(c, "aqi_pm25", o.getDouble("pm2_5").toFloat())
-            if (!o.isNull("pm10")) HudNativePrefs.setFloat(c, "aqi_pm10", o.getDouble("pm10").toFloat())
+            val root = JSONObject(txt)
+            val cur = root.getJSONObject("current")
+            val pm25 = average(root.optJSONObject("hourly") ?: JSONObject(), "pm2_5") ?: cur.optDouble("pm2_5").takeUnless { it.isNaN() }
+            val pm10 = average(root.optJSONObject("hourly") ?: JSONObject(), "pm10") ?: cur.optDouble("pm10").takeUnless { it.isNaN() }
+            if (!cur.isNull("us_aqi")) HudNativePrefs.setNum(c, "aqi_v", Math.round(cur.getDouble("us_aqi")).toInt())
+            naqi(pm25, pm10)?.let { HudNativePrefs.setNum(c, "aqi_in", it) }
             HudNativePrefs.setLong(c, "aqi_at", System.currentTimeMillis())
         }
     }
+
+    /** The index in the chosen scale, or -1 when there is none yet. */
+    fun value(c: Context): Int =
+        if (HudNativePrefs.num(c, HudNativePrefs.AQI_SCALE, US) == INDIA) HudNativePrefs.num(c, "aqi_in", -1) else HudNativePrefs.num(c, "aqi_v", -1)
 }
 
 /**
@@ -184,14 +234,7 @@ object HudNative {
     private fun tap(action: String) = TapRef(HudSources.LOCAL, action)
     private const val MIN = 60_000L
 
-    /** Hands up to ten minutes, then the bracket with the time: ✌🖐 ⌊7MIN, or ⌊1H 05M. */
-    private fun countdown(minutes: Long, tap: TapRef?): List<Token> {
-        val m = minutes.coerceAtLeast(1L).toInt()
-        val out = ArrayList<Token>()
-        HudRules.hands(m).forEach { out += GlyphToken(it, tap) }
-        out += Timer(if (m >= 60) "${m / 60}H ${"%02d".format(m % 60)}M" else "${m}MIN", tap)
-        return out
-    }
+    private fun countdown(minutes: Long, tap: TapRef?): List<Token> = HudRules.countdownTokens(minutes.coerceAtLeast(1L).toInt(), tap)
 
     private fun minutesUntil(at: Long, now: Long) = (at - now + MIN - 1) / MIN
 
@@ -214,6 +257,10 @@ object HudNative {
             "SUNSET" to Astro.sunsetMs(today, zone, lat, lon),
         )
         val (name, at) = events.firstOrNull { (_, t) -> now >= t - before && now <= t + after } ?: return null
+        return sunBlock(c, name, at, now, zone)
+    }
+
+    fun sunBlock(c: Context, name: String, at: Long, now: Long, zone: ZoneId): Block {
         val t = tap(HudSources.SETTINGS)
         val line = ArrayList<Token>()
         line += GlyphToken(HudGlyph.TWILIGHT, t)
@@ -284,6 +331,10 @@ object HudNative {
         if (c.checkSelfPermission(Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) return null
         val names = bdayNames(c, now, today)
         if (names.isEmpty()) return null
+        return bdayBlock(names)
+    }
+
+    fun bdayBlock(names: List<String>): Block {
         val t = tap(HudSources.BDAY)
         val first = names[0].uppercase(Locale.getDefault())
         val short = ArrayList<Token>()
@@ -334,8 +385,12 @@ object HudNative {
         val lead = HudNativePrefs.num(c, HudNativePrefs.BED_LEAD, 30) * MIN
         val bed = today.atStartOfDay(zone).plusMinutes(minute.toLong()).toInstant().toEpochMilli()
         if (now > bed || now < bed - lead) return null
+        return bedBlock(minutesUntil(bed, now))
+    }
+
+    fun bedBlock(minutes: Long): Block {
         val t = tap(HudSources.SETTINGS)
-        return Block("bed", listOf(listOf<Token>(GlyphToken(HudGlyph.ZZZ, t), Text("BEDTIME IN", t)) + countdown(minutesUntil(bed, now), t)))
+        return Block("bed", listOf(listOf<Token>(GlyphToken(HudGlyph.ZZZ, t), Text("BEDTIME IN", t)) + countdown(minutes, t)))
     }
 
     /** What the bedtime sync can see, for working out why it does not follow Digital Wellbeing. */
@@ -359,6 +414,10 @@ object HudNative {
         val n = HudSteps.today(c) ?: return null
         val reached = n >= HudNativePrefs.num(c, HudNativePrefs.STEPS_GOAL, 10_000)
         if (!HudRelevance.allow(c, "steps", "${n / 1000}:$reached")) return null
+        return stepsBlock(n, reached)
+    }
+
+    fun stepsBlock(n: Int, reached: Boolean): Block {
         val t = tap(HudSources.SETTINGS)
         val line = ArrayList<Token>()
         line += IconPill(GlyphKey(HudGlyph.STEPS), t)
@@ -374,14 +433,19 @@ object HudNative {
         if (!HudNativePrefs.flag(c, HudNativePrefs.AQI, true)) return null
         val at = HudNativePrefs.long(c, "aqi_at", 0L)
         if (at <= 0L || now - at > 3 * 3_600_000L) return null
-        val v = HudNativePrefs.num(c, "aqi_v", -1)
+        val v = Aqi.value(c)
         if (v < 0) return null
-        val thr = HudNativePrefs.num(c, HudNativePrefs.AQI_THR, 150)
+        val thr = if (HudNativePrefs.num(c, HudNativePrefs.AQI_SCALE, Aqi.US) == Aqi.INDIA) HudNativePrefs.num(c, HudNativePrefs.AQI_THR_IN, 200)
+                  else HudNativePrefs.num(c, HudNativePrefs.AQI_THR, 150)
         val margin = HudNativePrefs.num(c, HudNativePrefs.AQI_MARGIN, 5)
         val was = HudNativePrefs.flag(c, HudNativePrefs.AQI_ACTIVE, false)
         val on = v >= thr || (was && v >= thr - margin)
         if (on != was) HudNativePrefs.setFlag(c, HudNativePrefs.AQI_ACTIVE, on)
         if (!on) return null
+        return aqiBlock(v)
+    }
+
+    fun aqiBlock(v: Int): Block {
         val t = tap(HudSources.SETTINGS)
         return Block("aqi", listOf(listOf<Token>(GlyphToken(HudGlyph.MASK, t), Text("AQI", t), OutlinePill("$v", t))))
     }
@@ -397,6 +461,10 @@ object HudNative {
         if ((Prefs.weather(c)?.second ?: "") in RAINING) return null
         val mins = minutesUntil(at, now)
         if (mins < 1 || mins > HudNativePrefs.num(c, HudNativePrefs.RAIN_WIN, 60)) return null
+        return rainBlock(mins)
+    }
+
+    fun rainBlock(mins: Long): Block {
         val t = tap(HudSources.SETTINGS)
         return Block("rain", listOf(listOf<Token>(GlyphToken(HudGlyph.RAIN, t), Text("RAIN IN", t)) + countdown(mins, t)))
     }
@@ -415,10 +483,14 @@ object HudNative {
         val imminent = mins <= 10
         val ok = HudRelevance.allow(c, "event", "${ev.title}:${ev.begin}:$imminent")
         if (!imminent && !ok) return null
+        return eventBlock(ev.title, mins)
+    }
+
+    fun eventBlock(title: String, mins: Long): Pair<Int, Block> {
         val t = tap(HudSources.EVENT)
-        val title = listOf<Token>(GlyphToken(HudGlyph.SPEAK, t), Text(ev.title.uppercase(Locale.getDefault()), t), GlyphToken(HudGlyph.FOLLOWUP, t))
+        val first = listOf<Token>(GlyphToken(HudGlyph.SPEAK, t), Text(title.uppercase(Locale.getDefault()), t), GlyphToken(HudGlyph.FOLLOWUP, t))
         val second: List<Token> = if (mins <= 0) listOf(Text("STARTING NOW", t)) else listOf<Token>(Text("STARTING IN", t)) + countdown(mins, t)
-        return (if (imminent) 0 else 3) to Block("event", listOf(title, second), kind = "calendar")
+        return (if (mins <= 10) 0 else 3) to Block("event", listOf(first, second), kind = "calendar")
     }
 
     /** [ALARM] ALARM IN ⌊1H 20M, within [HudNativePrefs.ALARM_LEAD] minutes of the next alarm clock. Ambient. */
@@ -428,6 +500,10 @@ object HudNative {
         val mins = minutesUntil(at, now)
         if (mins < 1 || mins > HudNativePrefs.num(c, HudNativePrefs.ALARM_LEAD, 120)) return null
         if (!HudRelevance.allow(c, "alarm", "$at")) return null
+        return alarmBlock(mins)
+    }
+
+    fun alarmBlock(mins: Long): Block {
         val t = tap(HudSources.ALARM)
         return Block("alarm", listOf(listOf<Token>(GlyphToken(HudGlyph.ALARM, t), Text("ALARM IN", t)) + countdown(mins, t)))
     }

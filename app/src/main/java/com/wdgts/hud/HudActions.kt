@@ -40,6 +40,9 @@ object HudActions {
                 HudSignals.lookDismissedAt = System.currentTimeMillis()
                 HudWidget().refreshAll(ctx.applicationContext)
             }
+            action == HudSources.MATCH -> HudFootball.match(ctx)?.let {
+                start(ctx, Intent(Intent.ACTION_VIEW, Uri.parse("https://www.espn.com/soccer/match/_/gameId/${it.id}")))
+            } ?: Unit
             action == HudSources.BDAY -> {
                 HudNativePrefs.setLong(ctx, HudNativePrefs.BDAY_DISMISSED, LocalDate.now().toEpochDay())
                 HudWidget().refreshAll(ctx.applicationContext)

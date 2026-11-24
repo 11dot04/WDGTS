@@ -19,7 +19,6 @@ object HudGeometry {
 
     /** [widgetId] = the instance being drawn; without it the first one placed. */
     fun of(ctx: Context, widgetId: Int? = null): Geo {
-        HudPrefs.syncGeometry(ctx)
         val mgr = AppWidgetManager.getInstance(ctx)
         val id = widgetId ?: mgr.getAppWidgetIds(ComponentName(ctx, HudWidget::class.java)).firstOrNull()
         val o = id?.let { mgr.getAppWidgetOptions(it) }
@@ -28,6 +27,7 @@ object HudGeometry {
         val hDp = o?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)?.takeIf { it > 0 } ?: 150
         val w = (wDp * d).toInt()
         val h = (hDp * d).toInt()
+        HudPrefs.syncGeometry(ctx, h)
         return Geo(w, h, HudSizing.of(w, h))
     }
 }
