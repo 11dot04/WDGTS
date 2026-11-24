@@ -57,17 +57,18 @@ object Hud {
     const val OUTLINE_PAD = 3.6f
 
     const val LINES = 4
-    /** Fewest and most lines a widget can show; the fifth only appears when the widget is tall enough. */
-    const val MIN_LINES = 4
+    /** Fewest and most lines a widget can show: a 4x1 shows the date and two lines, a 4x2 the date and three; the fifth only appears when the widget is tall enough. */
+    const val MIN_LINES = 3
     const val MAX_LINES = 5
     /** Ambient blocks (tithi, chips, ordinary weather) never use body lines past this many. */
     const val AMBIENT_BODY_LINES = 3
     const val BODY_LINES = LINES - 1
     const val LINE_PITCH = 11.9f
-    const val PAD_H = 3f
-    const val PAD_V = 4f
+    /** Edge padding in design units; set from [com.wdgts.hud.HudPrefs.edge] before anything is sized (tight 1.2 / 1.6, normal 2 / 2.8, roomy 3 / 4). */
+    @Volatile var PAD_H = 2f
+    @Volatile var PAD_V = 2.8f
     const val WIDTH_UNITS = 150f
-    const val HEIGHT_UNITS = LINES * LINE_PITCH + 2 * PAD_V
+    val HEIGHT_UNITS: Float get() = LINES * LINE_PITCH + 2 * PAD_V
 }
 
 /**

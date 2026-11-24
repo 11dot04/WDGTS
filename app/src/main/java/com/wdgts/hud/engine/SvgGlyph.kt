@@ -10,7 +10,8 @@ import androidx.core.graphics.PathParser
  * A glyph read straight from its SVG: filled paths plus stroked rounded rects (the unit rings).
  * Coordinates stay in SVG user units; [draw] scales them by the HUD unit, so no conversion step
  * and no density maths. Supports exactly what the design set uses: <path d>, <rect> with rx/stroke,
- * fill-rule, width/height on <svg>. Groups, transforms, gradients and text are not supported.
+ * fill-rule, width/height on <svg>. A viewBox that differs from width/height (Material Symbols: 0 -960 960 960 shown
+ * at 8.6) is mapped onto the box. Groups, transforms, gradients and text are not supported.
  */
 class SvgGlyph(
     val width: Float,
@@ -73,6 +74,7 @@ class SvgGlyph(
             var h: Float? = null
             val fills = ArrayList<Path>()
             val rings = ArrayList<Ring>()
+            var view: android.graphics.Matrix? = null
             for (m in TAG.findAll(svg)) {
                 val attrs = ATTR.findAll(m.groupValues[2]).associate { it.groupValues[1] to it.groupValues[2] }
                 when (m.groupValues[1]) {
@@ -80,9 +82,22 @@ class SvgGlyph(
                         w = num(attrs["width"])
                         h = num(attrs["height"])
                         val vb = attrs["viewBox"]?.trim()?.split(Regex("[ ,]+"))
-                        if ((w == null || h == null) && vb != null && vb.size == 4) {
+                        val wf = w
+                        val hf = h
+                        if ((wf == null || hf == null) && vb != null && vb.size == 4) {
                             w = vb[2].toFloatOrNull()
                             h = vb[3].toFloatOrNull()
+                        } else if (vb != null && vb.size == 4 && wf != null && hf != null) {
+                            val vx = vb[0].toFloatOrNull(); val vy = vb[1].toFloatOrNull()
+                            val vw = vb[2].toFloatOrNull(); val vh = vb[3].toFloatOrNull()
+                            if (vx != null && vy != null && vw != null && vh != null && vw > 0f && vh > 0f &&
+                                (vx != 0f || vy != 0f || vw != wf || vh != hf)
+                            ) {
+                                val mat = android.graphics.Matrix()
+                                mat.postTranslate(-vx, -vy)
+                                mat.postScale(wf / vw, hf / vh)
+                                view = mat
+                            }
                         }
                     }
                     "path" -> {
@@ -93,6 +108,7 @@ class SvgGlyph(
                             continue
                         }
                         if (attrs["fill-rule"] == "evenodd") p.fillType = Path.FillType.EVEN_ODD
+                        view?.let { p.transform(it) }
                         fills += p
                     }
                     "rect" -> {

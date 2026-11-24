@@ -28,7 +28,11 @@ enum class HudGlyph(val res: String) {
     RINGS("hud_rings"), COPYRIGHT("hud_unit_c"), PAUSE("hud_pause_pill"), CASSETTE("hud_cassette_pill"),
 
     /** The add pill (a plus knocked out of a stadium); with FOLLOWUP and ARROW_NE it takes turns as the action pill ([ActionPills]). */
-    ADD("hud_add_pill");
+    ADD("hud_add_pill"),
+
+    /** Material Symbols (rounded, filled) for the native complications; BALLOON and ZZZ are drawn in the Nothing style. */
+    TWILIGHT("hud_m_twilight"), MASK("hud_m_masks"), THUMB_UP("hud_m_thumb_up"), STEPS("hud_m_steps"), ALARM("hud_m_alarm"),
+    BALLOON("hud_balloon"), ZZZ("hud_zzz");
 
     val isWeather get() = name in WEATHER
     val isHand get() = name.startsWith("HAND_")
