@@ -54,4 +54,40 @@ object HudPrefs {
     /** Scale the HUD's text up so it fills the widget's width / height (up to 1.5 x the base size). */
     fun fill(c: Context) = sp(c).getBoolean("hud_fill", true)
     fun setFill(c: Context, on: Boolean) = sp(c).edit().putBoolean("hud_fill", on).apply()
+
+    // ---------------------------------------------------------------- edge padding
+
+    const val EDGE_TIGHT = 0
+    const val EDGE_NORMAL = 1
+    const val EDGE_ROOMY = 2
+
+    /** How much air the HUD leaves around its text: tight, normal or roomy. */
+    fun edge(c: Context) = sp(c).getInt("edge", EDGE_NORMAL)
+    fun setEdge(c: Context, v: Int) = sp(c).edit().putInt("edge", v).apply()
+
+    /** Puts the chosen padding into [com.wdgts.hud.engine.Hud] so sizing, drawing and tap zones all use the same numbers. */
+    fun syncGeometry(c: Context) {
+        when (edge(c)) {
+            EDGE_TIGHT -> { com.wdgts.hud.engine.Hud.PAD_H = 1.2f; com.wdgts.hud.engine.Hud.PAD_V = 1.6f }
+            EDGE_ROOMY -> { com.wdgts.hud.engine.Hud.PAD_H = 3f; com.wdgts.hud.engine.Hud.PAD_V = 4f }
+            else -> { com.wdgts.hud.engine.Hud.PAD_H = 2f; com.wdgts.hud.engine.Hud.PAD_V = 2.8f }
+        }
+    }
+
+    /** Draws a thin outline at the edge of the bitmap, to see whether the launcher or the HUD is leaving the margin. */
+    fun showBounds(c: Context) = sp(c).getBoolean("show_bounds", false)
+    fun setShowBounds(c: Context, on: Boolean) = sp(c).edit().putBoolean("show_bounds", on).apply()
+
+    // ---------------------------------------------------------------- data source
+
+    const val SOURCE_BOTH = 0
+    const val SOURCE_NATIVE = 1
+    const val SOURCE_SMARTSPACER = 2
+
+    /** Where the HUD gets its content: Smartspacer and the app's own sources together, the app's own only, or Smartspacer only. */
+    fun source(c: Context) = sp(c).getInt("source", SOURCE_BOTH)
+    fun setSource(c: Context, v: Int) = sp(c).edit().putInt("source", v).apply()
+
+    fun usesSmartspacer(c: Context) = source(c) != SOURCE_NATIVE
+    fun usesNative(c: Context) = source(c) != SOURCE_SMARTSPACER
 }

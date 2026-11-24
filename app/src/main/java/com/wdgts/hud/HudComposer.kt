@@ -28,18 +28,25 @@ import java.time.ZonedDateTime
  *   line 1      the date. A greeting may take it over for a minute, a few times a day.
  *   line 2      the weather, right under the date, as in the reference, unless the lines are needed
  *               (then the temperature moves up into line 1 as a chip)
- *   the rest    blocks by relevance: 0 urgent (missed calls) > 1 contextual (Smartspacer's top target, music,
- *               look-away, streaks) > 2 ambient (tithi, charging, notification chips; never on the fifth line)
+ *   the rest    blocks by relevance: 0 urgent (missed calls, an event in the next ten minutes) > 1 contextual
+ *               (Smartspacer's top target, music, look-away, streaks, and the native sunrise/sunset, birthday, bedtime,
+ *               air quality, rain) > 2 ambient (tithi, notification chips) > 3 lowest (steps, alarm and event
+ *               countdowns, charging); ambient and lowest never use the fifth line
  */
 object HudComposer {
     private const val GREETING_MS = 60_000L
 
     private class Ranked(val cls: Int, val block: Block)
 
+    private val SUN_WORDS = Regex("SUNRISE|SUNSET")
+
     /** [slots] = body lines available (3 on a 4-line widget, 4 when the widget is tall enough for five). */
     fun compose(c: Context, slots: Int): HudContent {
         val app = c.applicationContext
-        HudSmartspacerSource.ensure(app) { HudWidget().refreshAll(app) }
+        HudPrefs.syncGeometry(app)
+        val useSmartspacer = HudPrefs.usesSmartspacer(app)
+        val useNative = HudPrefs.usesNative(app)
+        if (useSmartspacer) HudSmartspacerSource.ensure(app) { HudWidget().refreshAll(app) }
 
         val now = System.currentTimeMillis()
         val zone = ZoneId.systemDefault()
@@ -49,15 +56,28 @@ object HudComposer {
 
         val ranked = ArrayList<Ranked>()
         HudSources.missedCalls()?.let { ranked += Ranked(0, it) }
-        val target = HudSmartspacerSource.top(c) { b -> adjustTarget(b, greetingOk) }
+        val target = if (useSmartspacer) HudSmartspacerSource.top(c) { b -> adjustTarget(b, greetingOk) } else null
         target?.let { ranked += Ranked(1, it) }
-        HudSmartspacerSource.extras(c, target?.id)?.let { ranked += Ranked(2, it) }   // independent complications fill what is left
+        if (useSmartspacer) HudSmartspacerSource.extras(c, target?.id)?.let { ranked += Ranked(2, it) }   // independent complications fill what is left
         HudSources.music(c)?.let { ranked += Ranked(1, it) }
         HudSources.lookAway(now)?.let { ranked += Ranked(1, it) }
         HudSources.streaks(c, now, zone, today, zdt.hour)?.let { ranked += Ranked(1, it) }
         HudSources.tithi(c, now, zone, today)?.let { ranked += Ranked(2, it.copy(optional = true)) }
-        HudSources.charging(c)?.let { ranked += Ranked(2, it.copy(optional = true)) }
         HudSources.chips(c)?.let { ranked += Ranked(2, it.copy(optional = true)) }
+        HudSources.charging(c)?.let { ranked += Ranked(3, it.copy(optional = true)) }
+
+        // the app's own sources: each speaks only in its window; Smartspacer's equivalent wins the line when both are on
+        if (useNative) {
+            val fromSmartspacer = ranked.joinToString(" ") { r -> r.block.segments.flatten().filterIsInstance<Text>().joinToString(" ") { it.text } }.uppercase()
+            if (!SUN_WORDS.containsMatchIn(fromSmartspacer)) HudNative.sun(c, now, zone, today)?.let { ranked += Ranked(1, it) }
+            HudNative.birthday(c, now, today, zdt.hour)?.let { ranked += Ranked(1, it) }
+            HudNative.bedtime(c, now, zone, today)?.let { ranked += Ranked(1, it) }
+            HudNative.aqi(c, now)?.let { ranked += Ranked(1, it) }
+            HudNative.rain(c, now)?.let { ranked += Ranked(1, it) }
+            if (target?.kind != "calendar") HudNative.event(c, now)?.let { (cls, b) -> ranked += Ranked(cls, b) }
+            HudNative.alarm(c, now)?.let { ranked += Ranked(3, it.copy(optional = true)) }
+            HudNative.steps(c)?.let { ranked += Ranked(3, it.copy(optional = true)) }
+        }
 
         // a greeting takes over line 1 while it is allowed
         var takeover: List<Token>? = null
@@ -75,7 +95,7 @@ object HudComposer {
         }
 
         // weather: the renderer gives it its own line under the date when that displaces nothing, else a temperature chip on line 1
-        val weather: WeatherInfo? = HudSmartspacerSource.weather() ?: HudSources.weather(c, now, zone, today)
+        val weather: WeatherInfo? = (if (useSmartspacer) HudSmartspacerSource.weather() else null) ?: HudSources.weather(c, now, zone, today)
         val weatherBlock = weather?.let { HudBlocks.weather(it).copy(optional = true) }
         val chip = if (weather != null && takeover == null) HudBlocks.temperatureChip(weather.temp, weather.celsius) else emptyList()
 

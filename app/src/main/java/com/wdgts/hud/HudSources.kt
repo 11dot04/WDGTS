@@ -57,6 +57,9 @@ object HudSources {
     const val DRIK = "DRIK"
     const val MUSIC_TOGGLE = "MUSIC_TOGGLE"
     const val SETTINGS = "SETTINGS"
+    const val BDAY = "BDAY"
+    const val EVENT = "EVENT"
+    const val ALARM = "ALARM"
     const val APP_PREFIX = "APP:"
 
     private fun tap(action: String) = TapRef(LOCAL, action)

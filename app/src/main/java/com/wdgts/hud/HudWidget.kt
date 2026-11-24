@@ -20,6 +20,7 @@ import com.wdgts.core.*
 import com.wdgts.hud.engine.GlyphRegistry
 import com.wdgts.hud.engine.Hud
 import com.wdgts.hud.engine.HudColors
+import com.wdgts.hud.engine.HudGlyph
 import com.wdgts.hud.engine.HudHits
 import com.wdgts.hud.engine.HudRenderer
 import com.wdgts.hud.engine.HudSizing
@@ -42,16 +43,22 @@ class HudWidget : ImageWidget() {
     override val layoutRes: Int = R.layout.widget_hud
 
     override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) {
+        HudPrefs.syncGeometry(c)
         super.onUpdate(c, m, ids)
         val app = c.applicationContext
-        HudSmartspacerSource.start(app) { HudWidget().refreshAll(app) }
-        async { Weather.refreshIfStale(c); refreshAll(c) }
+        if (HudPrefs.usesSmartspacer(app)) HudSmartspacerSource.start(app) { HudWidget().refreshAll(app) }
+        async { Weather.refreshIfStale(c); Aqi.refreshIfStale(c); refreshAll(c) }
         Sched.arm(c, HudWidget::class.java, ACTION_TICK, System.currentTimeMillis() + 5 * 60_000L, 70)   // fallback if the listener isn't running
+        HudNative.armEdges(c)                                                                              // and the exact moments things start or stop mattering
     }
 
     override fun onReceive(c: Context, i: Intent) {
         when (i.action) {
-            ACTION_TICK -> { refreshAll(c); Sched.arm(c, HudWidget::class.java, ACTION_TICK, System.currentTimeMillis() + 5 * 60_000L, 70) }
+            ACTION_TICK -> {
+                refreshAll(c)
+                Sched.arm(c, HudWidget::class.java, ACTION_TICK, System.currentTimeMillis() + 5 * 60_000L, 70)
+                HudNative.armEdges(c)
+            }
             else -> super.onReceive(c, i)
         }
     }
@@ -61,8 +68,8 @@ class HudWidget : ImageWidget() {
      * a title, a chip and a countdown can each be their own target. A widget cannot report where you touched,
      * so spans are sized in pixels to match the layout; everything is anchored to the top.
      */
-    override fun bind(ctx: Context, rv: RemoteViews) {
-        val g = HudGeometry.of(ctx)
+    override fun bind(ctx: Context, rv: RemoteViews, id: Int) {
+        val g = HudGeometry.of(ctx, id)
         val slots = g.size.bodyLines
         val content = HudComposer.compose(ctx, slots)
         val laid = renderer(ctx).lay(g.widthPx, g.heightPx, content, HudPrefs.fill(ctx))
@@ -70,7 +77,7 @@ class HudWidget : ImageWidget() {
         val pitchPx = Hud.LINE_PITCH * laid.unit
         rv.setViewLayoutMargin(R.id.zone_l1, RemoteViews.MARGIN_TOP, Hud.PAD_V * laid.unit, TypedValue.COMPLEX_UNIT_PX)
         for (i in 0 until Hud.MAX_LINES) {
-            val lineId = id(ctx, "zone_l${i + 1}")
+            val lineId = viewId(ctx, "zone_l${i + 1}")
             if (i >= g.size.lines) {
                 rv.setViewVisibility(lineId, View.GONE)
                 continue
@@ -80,7 +87,7 @@ class HudWidget : ImageWidget() {
             val line = laid.lines.getOrNull(i) ?: emptyList()
             val spans = HudHits.spans(line, laid.unit, pad, g.widthPx.toFloat())
             for (j in 0 until SPANS) {
-                val spanId = id(ctx, "zone_l${i + 1}_s${j + 1}")
+                val spanId = viewId(ctx, "zone_l${i + 1}_s${j + 1}")
                 if (j >= spans.size) {
                     rv.setViewVisibility(spanId, View.GONE)
                     continue
@@ -95,24 +102,48 @@ class HudWidget : ImageWidget() {
         }
     }
 
-    private fun id(ctx: Context, name: String) = ctx.resources.getIdentifier(name, "id", ctx.packageName)
+    private fun viewId(ctx: Context, name: String) = ctx.resources.getIdentifier(name, "id", ctx.packageName)
 
     override fun Canvas.paint(ctx: Context, w: Int, h: Int) {
+        HudPrefs.syncGeometry(ctx)
         val p = Palette.of(ctx)
         if (CARD) drawColor(p.surface)
         val ink = if (CARD) p.onSurface else Color.WHITE
         val content = HudComposer.compose(ctx, HudSizing.of(w, h).bodyLines)
         renderer(ctx).draw(this, w, h, content, HudColors(ink, if (HudPrefs.materialYou(ctx)) ctx.getColor(android.R.color.system_accent1_200) else null, HudPrefs.fill(ctx)), iconPainter(ctx))
+        if (HudPrefs.showBounds(ctx)) {
+            val edge = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 3f; color = Color.argb(200, 255, 80, 60) }
+            drawRect(1.5f, 1.5f, w - 1.5f, h - 1.5f, edge)
+        }
     }
 
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val coverage = WeakHashMap<Bitmap, Float>()
+    private val glyphMasks = HashMap<HudGlyph, Bitmap>()
+
+    /** One of the HUD's own glyphs as a white mask cropped to its ink, so it can be tinted or knocked out of a pill like an app icon. */
+    private fun glyphMask(ctx: Context, g: HudGlyph): Bitmap? = synchronized(glyphMasks) {
+        glyphMasks[g]?.let { return it }
+        val svg = GlyphRegistry(ctx).glyph(g) ?: return null
+        val u = 10f
+        val ink = svg.ink
+        val bmp = Bitmap.createBitmap(
+            kotlin.math.ceil(ink.width() * u).toInt().coerceAtLeast(1), kotlin.math.ceil(ink.height() * u).toInt().coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888,
+        )
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Color.WHITE }
+        svg.draw(Canvas(bmp), -ink.left * u, -ink.top * u, u, fill, stroke)
+        glyphMasks[g] = bmp
+        bmp
+    }
 
     /** App icons (monochrome layer) and Smartspacer icons, optically sized; tinted, or cut out of a filled pill. */
     private fun iconPainter(ctx: Context) = IconPainter { key, c, x, cy, size, ink, knock ->
         val mask: Bitmap = when (key) {
             is AppIconKey -> GlyphMask.forPackage(ctx, key.pkg)
             is SsIconKey -> SmartspacerIcons.get(key)
+            is GlyphKey -> glyphMask(ctx, key.glyph)
             else -> null
         } ?: return@IconPainter
         val cov = coverage.getOrPut(mask) { GlyphMask.coverage(mask) }

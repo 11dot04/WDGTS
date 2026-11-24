@@ -17,9 +17,11 @@ object HudGeometry {
         val topPx get() = Hud.PAD_V * size.unit
     }
 
-    fun of(ctx: Context): Geo {
+    /** [widgetId] = the instance being drawn; without it the first one placed. */
+    fun of(ctx: Context, widgetId: Int? = null): Geo {
+        HudPrefs.syncGeometry(ctx)
         val mgr = AppWidgetManager.getInstance(ctx)
-        val id = mgr.getAppWidgetIds(ComponentName(ctx, HudWidget::class.java)).firstOrNull()
+        val id = widgetId ?: mgr.getAppWidgetIds(ComponentName(ctx, HudWidget::class.java)).firstOrNull()
         val o = id?.let { mgr.getAppWidgetOptions(it) }
         val d = ctx.resources.displayMetrics.density
         val wDp = o?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)?.takeIf { it > 0 } ?: 320

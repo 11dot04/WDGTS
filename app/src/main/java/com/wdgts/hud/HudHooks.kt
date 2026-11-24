@@ -32,6 +32,7 @@ class HudHooks(private val c: Context) {
                 Intent.ACTION_USER_PRESENT -> {
                     val day = LocalDate.now().toEpochDay()
                     if (Prefs.hudUnlockDay(c) != day) Prefs.setHudUnlock(c, day, now)       // first unlock of the day
+                    HudRelevance.onUnlock(c)
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     if (now - HudSignals.lastScreenOff > 20_000L || HudSignals.screenOnSince == 0L) HudSignals.screenOnSince = now
@@ -68,7 +69,7 @@ class HudHooks(private val c: Context) {
     fun attach() {
         if (attached) return
         attached = true
-        HudSmartspacerSource.start(c) { refresh() }
+        if (HudPrefs.usesSmartspacer(c)) HudSmartspacerSource.start(c) { refresh() }
         val f = IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT); addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_TIME_TICK)

@@ -1,9 +1,13 @@
 package com.wdgts.hud
 
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.AlarmClock
+import android.provider.CalendarContract
 import android.provider.CallLog
+import android.provider.ContactsContract
 import com.wdgts.SettingsActivity
 import com.wdgts.core.Haptics
 import com.wdgts.hud.engine.TapRef
@@ -36,6 +40,14 @@ object HudActions {
                 HudSignals.lookDismissedAt = System.currentTimeMillis()
                 HudWidget().refreshAll(ctx.applicationContext)
             }
+            action == HudSources.BDAY -> {
+                HudNativePrefs.setLong(ctx, HudNativePrefs.BDAY_DISMISSED, LocalDate.now().toEpochDay())
+                HudWidget().refreshAll(ctx.applicationContext)
+                start(ctx, Intent(Intent.ACTION_VIEW, ContactsContract.Contacts.CONTENT_URI))
+            }
+            action == HudSources.EVENT -> start(ctx, Intent(Intent.ACTION_VIEW, CalendarContract.CONTENT_URI.buildUpon().appendPath("time")
+                .also { ContentUris.appendId(it, System.currentTimeMillis()) }.build()))
+            action == HudSources.ALARM -> start(ctx, Intent(AlarmClock.ACTION_SHOW_ALARMS))
             action == HudSources.MUSIC_TOGGLE -> MusicState.controller?.transportControls?.let {
                 if (MusicState.playing) it.pause() else it.play()
             }
