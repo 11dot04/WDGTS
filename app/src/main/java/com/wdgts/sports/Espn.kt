@@ -119,6 +119,7 @@ object Espn {
             val status = comp.optJSONObject("status") ?: e.optJSONObject("status")
             val state = status?.optJSONObject("type")?.optString("state", "pre") ?: "pre"
             val clock = status?.optString("displayClock", "") ?: ""
+            val detail = status?.optJSONObject("type")?.optString("shortDetail", "").orEmpty()
             val comps = comp.optJSONArray("competitors") ?: continue
             var home: JSONObject? = null
             var away: JSONObject? = null
@@ -137,7 +138,7 @@ object Espn {
                 e.optString("id"), league, state, ms,
                 name(home), name(away), abbr(home), abbr(away), score(home), score(away), clock,
                 logo(home), logo(away), home.optJSONObject("team")?.optString("id") == teamId,
-                comp.optJSONObject("venue")?.optString("fullName").orEmpty(),
+                comp.optJSONObject("venue")?.optString("fullName").orEmpty(), detail,
             )
         }
         out
