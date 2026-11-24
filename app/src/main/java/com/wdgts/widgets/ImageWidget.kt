@@ -19,6 +19,9 @@ abstract class ImageWidget(private val defDp: Int = 170) : AppWidgetProvider() {
     protected abstract fun Canvas.paint(ctx: Context, w: Int, h: Int)
     protected open fun bind(ctx: Context, rv: RemoteViews) {}
 
+    /** For widgets whose tap zones depend on the size of this particular instance. */
+    protected open fun bind(ctx: Context, rv: RemoteViews, id: Int) = bind(ctx, rv)
+
     override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = ids.forEach { render(c, m, it) }
 
     override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = render(c, m, id)
@@ -36,7 +39,7 @@ abstract class ImageWidget(private val defDp: Int = 170) : AppWidgetProvider() {
         val bmp = Render.bitmap(w, h) { paint(c, w, h) }
         val rv = RemoteViews(c.packageName, layoutRes)
         rv.setImageViewBitmap(R.id.img, bmp)
-        bind(c, rv)
+        bind(c, rv, id)
         m.updateAppWidget(id, rv)
     }
 
