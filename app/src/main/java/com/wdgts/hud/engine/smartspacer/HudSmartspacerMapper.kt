@@ -139,7 +139,11 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
         val d = t.templateData
         if (d != null) collect(t, d, hide, segments) else legacy(t, hide, segments)
         if (segments.isEmpty()) return null
-        val kind = if (t.featureType == SmartspaceTarget.FEATURE_CALENDAR) "calendar" else null
+        val kind = when {
+            t.featureType == SmartspaceTarget.FEATURE_CALENDAR -> "calendar"
+            d is HeadToHeadTemplateData -> "sports"
+            else -> null
+        }
         val first = (segments.firstOrNull()?.firstOrNull { it is Text } as? Text)?.text.orEmpty()
         return Block(
             t.smartspaceTargetId, segments.take(Hud.BODY_LINES), kind = kind,
@@ -299,8 +303,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
                 else -> "IN"
             }
             line += Text(lead)
-            HudRules.hands(minutes).forEach { line += GlyphToken(it) }
-            line += Timer("${minutes}MIN")
+            line += HudRules.countdownTokens(minutes)
         } else if (sub.isNotEmpty()) {
             line += Text(txt(sub, hide))
         }
