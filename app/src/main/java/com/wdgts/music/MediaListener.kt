@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import com.wdgts.core.SubjectFit
 import com.wdgts.hud.HudHooks
 import com.wdgts.hud.HudPrefs
 import com.wdgts.hud.HudSignals
@@ -85,6 +86,9 @@ class MediaListener : NotificationListenerService() {
         sync()
     }
 
+    private var cutoutFor = ""                              // the art being segmented right now
+    private val cutoutTries = HashMap<String, Int>()
+
     private fun sync() {
         val c = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
             ?: controllers.firstOrNull { it.metadata != null }
@@ -114,16 +118,30 @@ class MediaListener : NotificationListenerService() {
         MusicState.hasSession = MusicState.title.isNotEmpty()
 
         val newKey = MusicState.key
-        if (newKey != oldKey || MusicState.cutoutKey != newKey) {
-            if (newKey != oldKey) MusicState.cutout = null
-            val art = MusicState.art
-            if (art != null) thread(name = "wdgts-cutout") {
-                val cut = Cutout.compute(applicationContext, art, newKey)
-                if (MusicState.key == newKey) {
-                    MusicState.cutout = cut
-                    MusicState.cutoutKey = newKey
-                    handler.post { MusicWidgets.refreshAll(this); HudWidget().refreshAll(this) }
+        val art = MusicState.art
+        val sig = SubjectFit.fingerprint(art)
+        val want = "$newKey:$sig"
+        if (newKey != oldKey || sig != MusicState.artSig) {              // another song, or the same song with new art
+            MusicState.cutout = null
+            MusicState.cutoutSig = ""
+        }
+        MusicState.artSig = sig
+        if (art != null && MusicState.cutoutSig != want && cutoutFor != want) {
+            cutoutFor = want
+            thread(name = "wdgts-cutout") {
+                val r = Cutout.computeFor(applicationContext, art, newKey, sig)
+                if (MusicState.key == newKey && MusicState.artSig == sig) when (r) {
+                    is Cutout.Result.Ok -> { MusicState.cutout = r.bitmap; MusicState.cutoutSig = want; MusicState.cutoutNote = r.note }
+                    is Cutout.Result.None -> { MusicState.cutout = null; MusicState.cutoutSig = want; MusicState.cutoutNote = r.note }
+                    Cutout.Result.Retry -> {
+                        MusicState.cutoutNote = "failed, will retry"
+                        val n = (cutoutTries[want] ?: 0) + 1
+                        cutoutTries[want] = n
+                        if (n <= 3) handler.postDelayed({ sync() }, 20_000L)
+                    }
                 }
+                cutoutFor = ""
+                handler.post { MusicWidgets.refreshAll(this); HudWidget().refreshAll(this) }
             }
         }
         Lyrics.ensure(this)

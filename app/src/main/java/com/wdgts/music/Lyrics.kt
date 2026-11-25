@@ -36,6 +36,9 @@ object Lyrics {
 
     fun ready(): Boolean = forKey == MusicState.key && lines.isNotEmpty()
 
+    /** Every line of the current song, to size the text for the whole song at once. */
+    fun all(): List<Line> = if (ready()) lines else emptyList()
+
     /** The line being sung at [posMs], or null between lines and when there are no lyrics. */
     fun current(posMs: Long): String? {
         if (!ready()) return null

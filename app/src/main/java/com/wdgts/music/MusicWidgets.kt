@@ -128,181 +128,123 @@ abstract class MusicBase : ImageWidget() {
 //    along the bottom: previous / next on the left half (two discs at rest, one pill while playing), play / pause
 //    as a pill on the right.
 // ============================================================================================
-private class Placed(val text: String, val x: Float, val w: Float, val line: Int)
-private class Flowed(val runs: List<Placed>, val size: Float, val fvar: String?, val lines: Int, val splits: Int)
-private class DepthLayout(val place: SubjectFit.Place?, val flow: Flowed?, val plain: Pair<List<String>, Float>?, val cutOut: Boolean)
+private class DepthLayout(val place: SubjectFit.Place?, val lines: List<String>, val size: Float, val cutOut: Boolean)
 
+/** The last few solved layouts, so two widgets of different sizes (or the app's preview) do not push each other out. */
 private object DepthCache {
-    private var key = ""
-    private var value: DepthLayout? = null
-    @Synchronized fun get(k: String, make: () -> DepthLayout): DepthLayout {
-        value?.let { if (key == k) return it }
-        return make().also { key = k; value = it }
+    private val map = object : LinkedHashMap<String, DepthLayout>(8, 0.75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, DepthLayout>) = size > 8
     }
+    @Synchronized fun get(k: String, make: () -> DepthLayout): DepthLayout = map[k] ?: make().also { map[k] = it }
 }
 
 private fun firstBase(size: Float, pad: Float, u: Float) = pad + 6.4f * u + size * 0.86f
 
-/** Horizontal extent (widget pixels) of the subject between two y values, or null where the row is clear. */
-private fun rowExtent(c: SubjectFit.Place, s: SubjectFit.Subject, y0: Float, y1: Float): Pair<Float, Float>? {
-    if (y1 < c.oy || y0 > c.oy + c.dh) return null
-    val r0 = (((y0 - c.oy) / c.dh) * s.mh).toInt().coerceIn(0, s.mh - 1)
-    val r1 = (((y1 - c.oy) / c.dh) * s.mh).toInt().coerceIn(0, s.mh - 1)
-    var lo = Float.MAX_VALUE
-    var hi = -Float.MAX_VALUE
-    for (r in r0..r1) for (cx in 0 until s.mw) if (s.mask[r * s.mw + cx]) {
-        val l = c.ox + cx.toFloat() / s.mw * c.dw
-        val rr = c.ox + (cx + 1f) / s.mw * c.dw
-        if (l < lo) lo = l
-        if (rr > hi) hi = rr
+/** The title broken into 1, 2 or 3 lines of whole words, each with the largest size that fits [maxW] x [maxH]. */
+private fun titleVariants(title: String, fp: MusicFonts.Pick, maxW: Float, maxH: Float): List<Pair<List<String>, Float>> {
+    val words = title.split(" ").filter { it.isNotBlank() }.ifEmpty { listOf(title) }
+    val out = ArrayList<Pair<List<String>, Float>>()
+    for (n in 1..minOf(3, words.size)) {
+        val per = ceil(words.size / n.toDouble()).toInt()
+        val lines = words.chunked(per).map { it.joinToString(" ") }
+        if (out.any { it.first == lines }) continue
+        out += lines to fitSize(lines, maxW, maxH / (lines.size * 0.95f), fp.tf, 0f, fp.fvar)
     }
-    return if (hi < lo) null else lo to hi
+    return out
+}
+
+/** One rectangle per word of the left-aligned title at [size], to measure how much of each word the subject would hide. */
+private fun wordRects(lines: List<String>, size: Float, fp: MusicFonts.Pick, pad: Float, u: Float, memo: HashMap<String, Float>): List<RectF> {
+    fun ww(s: String) = memo.getOrPut("$s|$size") { measureText(s, size, fp.tf, 0f, fp.fvar) }
+    val space = ww(" ").let { if (it > 0.05f) it else size * 0.26f }
+    val out = ArrayList<RectF>()
+    for ((i, l) in lines.withIndex()) {
+        val base = firstBase(size, pad, u) + i * size * 0.92f
+        var x = pad
+        for (word in l.split(" ").filter { it.isNotBlank() }) {
+            val wd = ww(word)
+            out += RectF(x, base - size * 0.70f, x + wd, base)
+            x += wd + space
+        }
+    }
+    return out
 }
 
 /**
- * Sets the words line by line and routes them around the subject: on a row the subject crosses, the words that
- * fit go to the left of it and the rest to the right (flush with the margins), so the cut-out sits in a gap in the
- * line rather than on top of a word. Returns null when a word cannot fit at this size or the block runs too low.
+ * The title is set as one plain block, left-aligned, in its own font at its own width, and the subject is allowed to stand in
+ * front of it: that overlap is the depth effect. It only steps in when too much would be hidden (more than 35% of the title,
+ * or any word less than 55% visible). Then, cheapest first: zoom the photo in a little and slide it (never out, so no gaps), a
+ * different line break, and at most 15% smaller type. Words are never split into slots and the font is never squeezed.
  */
-private fun flow(
-    words: List<String>, size: Float, fvar: String?, fp: MusicFonts.Pick, place: SubjectFit.Place, subj: SubjectFit.Subject,
-    w: Int, pad: Float, u: Float, maxBase: Float, memo: HashMap<String, Float>,
-): Flowed? {
-    fun ww(s: String) = memo.getOrPut("$s|$size|$fvar") { measureText(s, size, fp.tf, 0f, fvar) }
-    val space = ww(" ").let { if (it > 0.05f) it else size * 0.26f }
-    val x0 = pad
-    val x1 = w - pad
-    val tuck = 1.0f * u                       // type may slip this far under the subject: that is the depth cue
-    val pitch = size * 0.92f
-    val runs = ArrayList<Placed>()
-    var splits = 0
-    var wi = 0
-    var line = 0
-    while (wi < words.size) {
-        val base = firstBase(size, pad, u) + line * pitch
-        if (base > maxBase || line >= 8) return null
-        var slots: List<Pair<Float, Float>> = listOf(x0 to x1)
-        var blocked = false
-        val ext = rowExtent(place, subj, base - size * 0.74f, base + size * 0.04f)
-        if (ext != null) {
-            val bl = ext.first + tuck
-            val br = ext.second - tuck
-            if (br > bl) {
-                blocked = true
-                val l = x0 to minOf(x1, bl - space * 0.6f)
-                val r = maxOf(x0, br + space * 0.6f) to x1
-                slots = listOfNotNull(l.takeIf { it.second - it.first > 0f }, r.takeIf { it.second - it.first > 0f })
-            }
-        }
-        var placed = 0
-        for (sl in slots) {
-            val avail = sl.second - sl.first
-            var used = 0f
-            val start = wi
-            while (wi < words.size) {
-                val wd = ww(words[wi])
-                val add = if (wi == start) wd else space + wd
-                if (used + add > avail) break
-                used += add
-                wi++
-            }
-            if (wi > start) {
-                val x = if (sl.first > x0 + 0.5f) sl.second - used else sl.first
-                runs += Placed(words.subList(start, wi).joinToString(" "), x, used, line)
-                placed++
-            }
-        }
-        if (placed > 1) splits++
-        if (placed == 0 && !blocked) return null          // a word wider than the whole line
-        line++
-    }
-    return Flowed(runs, size, fvar, line, splits)
-}
-
-private fun narrowed(f: String): String {
-    val lo = if (f.contains("'XOPQ'")) 40 else 75
-    return Regex("'wdth' (-?\\d+)").replace(f) { "'wdth' ${(it.groupValues[1].toInt() * 0.8f).toInt().coerceAtLeast(lo)}" }
-}
-
 private fun solveDepth(art: Bitmap?, fg: Bitmap?, title: String, fp: MusicFonts.Pick, w: Int, h: Int, pad: Float, u: Float, maxBase: Float): DepthLayout {
     val plainH = (minOf(0.40f * h, maxBase - (pad + 6.4f * u))).coerceAtLeast(0.12f * h)
-    val plain = layoutTitle(title, fp, w - 2 * pad, plainH)
-    if (art == null) return DepthLayout(null, null, plain, false)
-    val cands = SubjectFit.places(art.width, art.height, w, h)
+    val variants = titleVariants(title, fp, w - 2 * pad, plainH)
+    val biggest = variants.maxByOrNull { it.second }!!
+    if (art == null) return DepthLayout(null, biggest.first, biggest.second, false)
     val subj = fg?.let { SubjectFit.subjectOf(it) }
     if (subj == null) {
-        val mid = cands.first { it.kf == 1f && Math.abs(it.ox - (w - it.dw) / 2f) < 1f && Math.abs(it.oy - (h - it.dh) / 2f) < 1f }
-        return DepthLayout(mid, null, plain, false)
+        val mid = SubjectFit.places(art.width, art.height, w, h)
+            .first { it.kf == 1f && Math.abs(it.ox - (w - it.dw) / 2f) < 1f && Math.abs(it.oy - (h - it.dh) / 2f) < 1f }
+        return DepthLayout(mid, biggest.first, biggest.second, false)
     }
 
-    val words = title.split(" ").filter { it.isNotBlank() }.ifEmpty { listOf(title) }
+    val cands = SubjectFit.placesZoomIn(art.width, art.height, w, h)
+    val valid = cands.filter { SubjectFit.outside(it, subj, w, h) < 0.02f }
+        .ifEmpty { cands.sortedBy { SubjectFit.outside(it, subj, w, h) }.take(3) }
+    val rest = valid.first()                                                    // kf 1 at the start corner: where it sits with no move
+    fun moveCost(c: SubjectFit.Place) =
+        (Math.abs(c.ox - (w - c.dw) / 2f) + Math.abs(c.oy - (h - c.dh) / 2f)) / w + (c.kf - 1f) * 1.5f
+    val sMax = biggest.second
     val memo = HashMap<String, Float>()
-    val longest = words.maxOf { measureText(it, 100f, fp.tf, 0f, fp.fvar) }
-    val sMax = minOf(0.30f * h, 100f * (w - 2 * pad) / longest)
-    val variants = ArrayList<String?>().apply { add(fp.fvar); fp.fvar?.let { if (it.contains("'wdth'")) add(narrowed(it)) } }
 
-    // The order of precedence: the subject stays where the photo puts it and the type bends around it. Only when
-    // the type cannot be set at a decent size around the subject there does the photo move, and then as little as
-    // possible. (Searching both freely at once pushed the subject away from the type.)
-    fun moveCost(c: SubjectFit.Place) = (Math.abs(c.ox - (w - c.dw) / 2f) + Math.abs(c.oy - (h - c.dh) / 2f)) / w + (1f - c.kf) * 1.2f
-
-    /** The largest type that flows around the subject at [c] (not smaller than [minSize]) and the share of it the subject covers. */
-    fun bestAt(c: SubjectFit.Place, minSize: Float): Pair<Flowed, Float>? {
-        var bf: Flowed? = null
-        var bov = 0f
-        var bs = -1f
-        for ((vi, v) in variants.withIndex()) {
-            var size = sMax
-            for (i in 0 until 14) {
-                if (size < minSize) break
-                val f = flow(words, size, v, fp, c, subj, w, pad, u, maxBase, memo)
-                if (f != null) {
-                    val rects = f.runs.map {
-                        val by = firstBase(size, pad, u) + it.line * size * 0.92f
-                        RectF(it.x, by - size * 0.70f, it.x + it.w, by)
-                    }
-                    val ov = SubjectFit.covered(c, subj, rects)
-                    if (ov <= 0.10f) {
-                        val sc = size * (if (vi > 0) 0.97f else 1f) - f.splits * 0.004f * sMax - ov * sMax
-                        if (sc > bs) { bs = sc; bf = f; bov = ov }
-                        break                                   // sizes run downwards: the first fit is the largest
-                    }
-                }
-                size *= 0.9f
+    var pickScore = -1e9f; var pick: Triple<SubjectFit.Place, List<String>, Float>? = null
+    var fallScore = -1e9f; var fall: Triple<SubjectFit.Place, List<String>, Float>? = null
+    for (v in variants) for (f in floatArrayOf(1f, 0.94f, 0.88f, 0.85f)) {
+        val s = v.second * f
+        val rects = wordRects(v.first, s, fp, pad, u, memo)
+        for (c in valid) {
+            val hidden = SubjectFit.covered(c, subj, rects)
+            var minVisible = 1f
+            for (r in rects) minVisible = minOf(minVisible, 1f - SubjectFit.covered(c, subj, listOf(r)))
+            val base = s / sMax - 1.4f * moveCost(c)
+            if (hidden <= 0.35f && minVisible >= 0.55f) {
+                if (base > pickScore) { pickScore = base; pick = Triple(c, v.first, s) }
+            } else if (base - hidden * 2f > fallScore) {
+                fallScore = base - hidden * 2f; fall = Triple(c, v.first, s)
             }
         }
-        return bf?.let { it to bov }
     }
+    val chosen = pick ?: fall ?: Triple(rest, biggest.first, biggest.second)
+    return DepthLayout(chosen.first, chosen.second, chosen.third, true)
+}
 
-    val valid = cands.filter { SubjectFit.outside(it, subj, w, h) < 0.02f }.sortedBy { moveCost(it) }
-    var bestPlace: SubjectFit.Place? = null
-    var bestFlow: Flowed? = null
+/** Greedy word wrap of a lyric line at [size]; every row but a possibly overlong single word fits [maxW]. */
+private fun wrapRows(text: String, maxW: Float, size: Float, tf: android.graphics.Typeface, fv: String?): List<String> {
+    val words = text.split(" ").filter { it.isNotBlank() }
+    if (words.isEmpty()) return listOf(text)
+    val rows = ArrayList<String>()
+    var cur = ""
+    for (wd in words) {
+        val t = if (cur.isEmpty()) wd else "$cur $wd"
+        if (cur.isNotEmpty() && measureText(t, size, tf, 0f, fv) > maxW) { rows += cur; cur = wd } else cur = t
+    }
+    if (cur.isNotEmpty()) rows += cur
+    return rows
+}
 
-    // pass 1: the least-moved placements at which the type is still big (a few equally-moved ones compete on size)
-    val decent = maxOf(0.075f * h, 0.35f * sMax)
-    var m0 = -1f
-    var bestScore = -1f
-    for (c in valid) {
-        val mv = moveCost(c)
-        if (m0 >= 0f && mv > m0 + 0.04f) break
-        val r = bestAt(c, decent) ?: continue
-        if (m0 < 0f) m0 = mv
-        val sc = r.first.size - r.second * sMax
-        if (sc > bestScore) { bestScore = sc; bestPlace = c; bestFlow = r.first }
+/** One lyric size for the whole song: the largest at which every line wraps to at most two rows. */
+private object LyricSize {
+    private var key = ""
+    private var size = 0f
+    @Synchronized fun forSong(maxW: Float, base: Float, floor: Float, tf: android.graphics.Typeface, fv: String?): Float {
+        val lines = Lyrics.all()
+        val k = "${MusicState.key}|${maxW.toInt()}|${base.toInt()}|${lines.size}"
+        if (k == key) return size
+        var s = base
+        while (s > floor && lines.any { wrapRows(it.s, maxW, s, tf, fv).size > 2 }) s *= 0.95f
+        key = k; size = s
+        return s
     }
-    // pass 2: nothing is big enough anywhere near: take any size, trading it against how far the photo moves
-    if (bestFlow == null) {
-        var best = -99f
-        for (c in valid) {
-            val r = bestAt(c, 0.045f * h) ?: continue
-            val sc = r.first.size / sMax - moveCost(c) * 1.2f - r.second - (r.first.lines - 3).coerceAtLeast(0) * 0.05f
-            if (sc > best) { best = sc; bestPlace = c; bestFlow = r.first }
-        }
-    }
-    val bp = bestPlace
-    val bf = bestFlow
-    return if (bp != null && bf != null) DepthLayout(bp, bf, null, true)
-    else DepthLayout(SubjectFit.centred(cands, subj, w, h), null, plain, false)
 }
 
 /** Frosted glass: the blurred cover with a light veil, cut to the given pills. */
@@ -359,12 +301,14 @@ class MusicDepthWidget : MusicBase() {
         val btnTop = h - 0.05f * h - rh
         val lyricSize = 4.6f * u
         val lyricBase = btnTop - 3.4f * u
-        val maxBase = minOf(0.64f * h, lyricBase - lyricSize - 3f * u)
+        val lyricsOn = MusicPrefs.lyrics(ctx)
+        val lyricRows = if (lyricsOn) 2 else 1                          // two rows are always kept free, so the title never shifts mid-song
+        val maxBase = minOf(0.64f * h, lyricBase - lyricSize * (1f + 1.14f * (lyricRows - 1)) - 3f * u)
 
         val fp = MusicFonts.pick(ctx, MusicState.key)
         val title = if (fp.upper) MusicState.title.uppercase() else MusicState.title
         val fg = MusicState.cutout
-        val ck = "${MusicState.key}|$w|$h|${System.identityHashCode(art)}|${System.identityHashCode(fg)}"
+        val ck = "${MusicState.key}|$w|$h|${SubjectFit.fingerprint(art)}|${SubjectFit.fingerprint(fg)}|$lyricRows"
         val lay = DepthCache.get(ck) { solveDepth(art, fg, title, fp, w, h, pad, u, maxBase) }
         val place = lay.place
 
@@ -372,14 +316,9 @@ class MusicDepthWidget : MusicBase() {
         if (art != null && place != null) with(SubjectFit) { drawPlaced(art, place, w, h, false, 11f * u, fg) } else drawColor(p.surface)
         drawRect(full, Paint().also { it.color = Color.argb(64, 0, 0, 0) })
 
-        // layer 2: the title, flowed around the subject
-        val fl = lay.flow
-        if (fl != null) {
-            for (r in fl.runs) label(r.text, r.x, firstBase(fl.size, pad, u) + r.line * fl.size * 0.92f, fl.size, ink, fp.tf, fvar = fl.fvar)
-        } else lay.plain?.let { (lines, size) ->
-            var y = firstBase(size, pad, u)
-            for (l in lines) { label(l, pad, y, size, ink, fp.tf, fvar = fp.fvar); y += size * 0.92f }
-        }
+        // layer 2: the title, behind the subject
+        var ty = firstBase(lay.size, pad, u)
+        for (l in lay.lines) { label(l, pad, ty, lay.size, ink, fp.tf, fvar = fp.fvar); ty += lay.size * 0.92f }
 
         // layer 3: the subject in front of the type, darkened by the same amount as the scrim so it matches the cover
         if (lay.cutOut && fg != null && place != null) {
@@ -399,17 +338,18 @@ class MusicDepthWidget : MusicBase() {
         ap.setShadowLayer(1.8f * u, 0f, 0f, Color.argb(170, 0, 0, 0))
         drawText(MusicState.artist.uppercase(), pad, pad + 3.8f * u, ap)
 
-        // the lyric line being sung
-        val line = if (MusicPrefs.lyrics(ctx)) Lyrics.current(MusicState.positionMs()) else null
+        // the lyric line being sung: one size for the whole song, wrapping to a second row instead of shrinking
+        val line = if (lyricsOn) Lyrics.current(MusicState.positionMs()) else null
         if (line != null) {
             val fv = Fonts.axes(wght = 520, wdth = 100)
-            var ls = lyricSize
             val maxW = w - 2 * pad
-            while (ls > 3.5f * u && measureText(line, ls, tf, 0f, fv) > maxW) ls *= 0.94f
-            val shown = if (measureText(line, ls, tf, 0f, fv) > maxW) ellipsize(line, maxW, ls, tf) else line
+            val ls = LyricSize.forSong(maxW, lyricSize, 3.4f * u, tf, fv)
+            var rows = wrapRows(line, maxW, ls, tf, fv)
+            if (rows.size > 2) rows = listOf(rows[0], ellipsize(rows.drop(1).joinToString(" "), maxW, ls, tf))
+            else rows = rows.map { if (measureText(it, ls, tf, 0f, fv) > maxW) ellipsize(it, maxW, ls, tf) else it }
             val lp = Paint(textPaint(ls, alpha(ink, 245), tf, Paint.Align.LEFT, 0f, fv))
             lp.setShadowLayer(1.6f * u, 0f, 0f, Color.argb(190, 0, 0, 0))
-            drawText(shown, pad, lyricBase, lp)
+            for ((i, r) in rows.withIndex()) drawText(r, pad, lyricBase - (rows.size - 1 - i) * ls * 1.14f, lp)
         }
 
         // buttons: previous/next on the left half, play/pause on the right
