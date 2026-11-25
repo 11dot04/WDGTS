@@ -60,6 +60,7 @@ import com.wdgts.hud.HudWidget
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource
 import com.wdgts.hud.engine.smartspacer.HudSmartspacerSource.Access
 import com.wdgts.music.MusicPrefs
+import com.wdgts.music.MusicState
 import com.wdgts.music.MusicWidgets
 import com.wdgts.sports.TeamWidget
 import com.wdgts.widgets.CountdownBrutalWidget
@@ -657,6 +658,7 @@ private fun MusicScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
                 WItem("Synced lyrics", "The line being sung, above the buttons. Looked up on LRCLIB, one request per song.", lyrics, {
                     lyrics = it; MusicPrefs.setLyrics(c, it); refresh()
                 }),
+                WItem("Copy music debug", "The art and cut-out the Depth widget is using, for a wrong cut-out.", onClick = { copy(c, "Music debug", MusicState.debug()) }),
             ),
         )
         WPlate("Depth buttons", "Colours taken from the cover, or frosted glass over it.") {
