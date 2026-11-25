@@ -22,6 +22,9 @@ object MusicState {
     @Volatile var artSig = 0L
     @Volatile var cutoutSig = ""
     @Volatile var cutoutNote = ""
+    /** The lettering found on the current art, and which art it belongs to. */
+    @Volatile var coverText: List<CoverText.Box> = emptyList()
+    @Volatile var coverTextSig = ""
     /** The session being mirrored; the HUD's pause button drives it. */
     @Volatile var controller: MediaController? = null
 
@@ -34,7 +37,8 @@ object MusicState {
         return "track=$title / $artist ($pkg)\n" +
             "art=${art?.let { "${it.width}x${it.height}" } ?: "none"} sig=${java.lang.Long.toHexString(artSig)}\n" +
             "cutout=${cut?.let { "${it.width}x${it.height}" } ?: "none"} for=$cutoutSig note=$cutoutNote\n" +
-            "lyrics=${Lyrics.all().size} lines"
+            "lyrics=${Lyrics.all().size} lines\n" +
+            "cover text for=$coverTextSig: " + coverText.joinToString(" | ") { "${it.text} (${(it.h * 100).toInt()}%)" }
     }
 
     fun positionMs(): Long =

@@ -88,6 +88,8 @@ class MediaListener : NotificationListenerService() {
 
     private var cutoutFor = ""                              // the art being segmented right now
     private val cutoutTries = HashMap<String, Int>()
+    private var textFor = ""                                // the art whose lettering is being read right now
+    private val textTries = HashMap<String, Int>()
 
     private fun sync() {
         val c = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
@@ -124,6 +126,8 @@ class MediaListener : NotificationListenerService() {
         if (newKey != oldKey || sig != MusicState.artSig) {              // another song, or the same song with new art
             MusicState.cutout = null
             MusicState.cutoutSig = ""
+            MusicState.coverText = emptyList()
+            MusicState.coverTextSig = ""
         }
         MusicState.artSig = sig
         if (art != null && MusicState.cutoutSig != want && cutoutFor != want) {
@@ -142,6 +146,24 @@ class MediaListener : NotificationListenerService() {
                 }
                 cutoutFor = ""
                 handler.post { MusicWidgets.refreshAll(this); HudWidget().refreshAll(this) }
+            }
+        }
+        if (art != null && MusicState.coverTextSig != want && textFor != want) {
+            textFor = want
+            thread(name = "wdgts-covertext") {
+                val boxes = CoverText.scan(applicationContext, art, newKey, sig)
+                if (MusicState.key == newKey && MusicState.artSig == sig) {
+                    if (boxes != null) {
+                        MusicState.coverText = boxes
+                        MusicState.coverTextSig = want
+                    } else {
+                        val n = (textTries[want] ?: 0) + 1
+                        textTries[want] = n
+                        if (n <= 2) handler.postDelayed({ sync() }, 20_000L)
+                    }
+                }
+                textFor = ""
+                handler.post { MusicWidgets.refreshAll(this) }
             }
         }
         Lyrics.ensure(this)

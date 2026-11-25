@@ -17,6 +17,10 @@ object MusicPrefs {
     /** Depth buttons: 0 = colours taken from the cover, 1 = frosted glass over the cover. */
     fun buttonStyle(c: Context) = Prefs.raw(c).getInt("music_btn_style", 0)
     fun setButtonStyle(c: Context, v: Int) = Prefs.raw(c).edit().putInt("music_btn_style", v).apply()
+
+    /** Depth: leave out the title or the artist line when the cover already shows it in readable lettering. */
+    fun hideDuplicates(c: Context) = Prefs.raw(c).getBoolean("music_hide_dup", true)
+    fun setHideDuplicates(c: Context, on: Boolean) = Prefs.raw(c).edit().putBoolean("music_hide_dup", on).apply()
 }
 
 /**
