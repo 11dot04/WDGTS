@@ -79,4 +79,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2") // only for the HUD logic test
     // ML Kit subject segmentation (via Google Play services) for the depth-effect music widget
     implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
+    // reads the lettering printed on the cover, so the Depth widget can leave it alone (Play services delivers the model, like segmentation)
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
 }
