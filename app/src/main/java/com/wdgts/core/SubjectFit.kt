@@ -61,6 +61,41 @@ object SubjectFit {
         return out
     }
 
+    /**
+     * Placements that only zoom in (up to 18%) and then slide the photo inside the box it still covers, so a move never
+     * leaves a gap to fill with scrim or blur. Offsets are never positive: the photo always reaches every edge.
+     */
+    fun placesZoomIn(aw: Int, ah: Int, w: Int, h: Int): List<Place> {
+        val k0 = maxOf(w / aw.toFloat(), h / ah.toFloat())
+        val out = ArrayList<Place>()
+        for (kf in floatArrayOf(1f, 1.06f, 1.12f, 1.18f)) {
+            val dw = aw * k0 * kf
+            val dh = ah * k0 * kf
+            val seen = HashSet<Long>()
+            for (i in 0 until 5) for (j in 0 until 5) {
+                val ox = minOf(0f, (w - dw) * i / 4f)
+                val oy = minOf(0f, (h - dh) * j / 4f)
+                if (seen.add((Math.round(ox) * 100003L) + Math.round(oy))) out += Place(kf, ox, oy, dw, dh)
+            }
+        }
+        return out
+    }
+
+    /** A cheap content fingerprint (size plus 36 sampled pixels): the same picture gives the same number even as a new Bitmap instance. */
+    fun fingerprint(b: Bitmap?): Long {
+        if (b == null) return 0L
+        var h = b.width * 31L + b.height
+        return runCatching {
+            val n = 6
+            for (i in 0 until n) for (j in 0 until n) {
+                val x = (b.width * (i + 0.5f) / n).toInt().coerceIn(0, b.width - 1)
+                val y = (b.height * (j + 0.5f) / n).toInt().coerceIn(0, b.height - 1)
+                h = (h xor b.getPixel(x, y).toLong()) * 1099511628211L
+            }
+            h
+        }.getOrDefault(h)
+    }
+
     /** How far the subject's box sticks out of the widget, as a share of the width. */
     fun outside(c: Place, s: Subject, w: Int, h: Int): Float {
         val bx0 = c.ox + s.x0 * c.dw; val bx1 = c.ox + s.x1 * c.dw
@@ -90,7 +125,7 @@ object SubjectFit {
         cost(c, s, w, h) + (Math.abs(cx - w / 2f) + Math.abs(cy - h / 2f)) / w * 0.4f
     }!!
 
-    private class Under(val art: Bitmap, val fg: Bitmap?, val out: Bitmap)
+    private class Under(val fpArt: Long, val fpFg: Long, val out: Bitmap)
     private val unders = ArrayList<Under>()
 
     private fun boxBlur(src: FloatArray, w: Int, h: Int, r: Int): FloatArray {
@@ -116,7 +151,9 @@ object SubjectFit {
      * where a zoomed-out photo does not reach the edge, so the subject is never seen twice.
      */
     fun underlay(art: Bitmap, fg: Bitmap?): Bitmap {
-        synchronized(unders) { unders.firstOrNull { it.art === art && it.fg === fg }?.let { return it.out } }
+        val fa = fingerprint(art)
+        val ff = fingerprint(fg)
+        synchronized(unders) { unders.firstOrNull { it.fpArt == fa && it.fpFg == ff }?.let { return it.out } }
         val mw = 64
         val mh = (mw * art.height.toFloat() / art.width).toInt().coerceIn(16, 128)
         val n = mw * mh
@@ -156,7 +193,7 @@ object SubjectFit {
             Color.rgb(soft[0][it].toInt().coerceIn(0, 255), soft[1][it].toInt().coerceIn(0, 255), soft[2][it].toInt().coerceIn(0, 255))
         }
         val bmp = Bitmap.createBitmap(res, mw, mh, Bitmap.Config.ARGB_8888)
-        synchronized(unders) { if (unders.size >= 3) unders.removeAt(0); unders += Under(art, fg, bmp) }
+        synchronized(unders) { if (unders.size >= 3) unders.removeAt(0); unders += Under(fa, ff, bmp) }
         return bmp
     }
 
