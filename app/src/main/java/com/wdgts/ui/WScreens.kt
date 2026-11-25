@@ -646,6 +646,7 @@ private fun MusicScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
     // Frame keeps its controls switch under its class name; a tap on the widget's corner flips it too.
     var frameControls by remember { mutableStateOf(Prefs.musicControls(c, "MusicFrameWidget")) }
     var lyrics by remember { mutableStateOf(MusicPrefs.lyrics(c)) }
+    var hideDup by remember { mutableStateOf(MusicPrefs.hideDuplicates(c)) }
     var style by remember { mutableIntStateOf(MusicPrefs.buttonStyle(c)) }
     fun refresh() { MusicWidgets.refreshAll(c.applicationContext); Preview.bump() }
 
@@ -657,6 +658,9 @@ private fun MusicScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
             listOf(
                 WItem("Synced lyrics", "The line being sung, above the buttons. Looked up on LRCLIB, one request per song.", lyrics, {
                     lyrics = it; MusicPrefs.setLyrics(c, it); refresh()
+                }),
+                WItem("Hide what the cover already says", "Leave out the title or the artist line when the cover shows it in readable lettering.", hideDup, {
+                    hideDup = it; MusicPrefs.setHideDuplicates(c, it); refresh()
                 }),
                 WItem("Copy music debug", "The art and cut-out the Depth widget is using, for a wrong cut-out.", onClick = { copy(c, "Music debug", MusicState.debug()) }),
             ),
