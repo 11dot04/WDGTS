@@ -647,6 +647,7 @@ private fun MusicScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
     var frameControls by remember { mutableStateOf(Prefs.musicControls(c, "MusicFrameWidget")) }
     var lyrics by remember { mutableStateOf(MusicPrefs.lyrics(c)) }
     var hideDup by remember { mutableStateOf(MusicPrefs.hideDuplicates(c)) }
+    var artist by remember { mutableStateOf(MusicPrefs.depthArtist(c)) }
     var style by remember { mutableIntStateOf(MusicPrefs.buttonStyle(c)) }
     fun refresh() { MusicWidgets.refreshAll(c.applicationContext); Preview.bump() }
 
@@ -658,6 +659,9 @@ private fun MusicScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
             listOf(
                 WItem("Synced lyrics", "The line being sung, above the buttons. Looked up on LRCLIB, one request per song.", lyrics, {
                     lyrics = it; MusicPrefs.setLyrics(c, it); refresh()
+                }),
+                WItem("Show the artist (Depth)", "The small line above the title. Off gives the title the room.", artist, {
+                    artist = it; MusicPrefs.setDepthArtist(c, it); refresh()
                 }),
                 WItem("Hide what the cover already says", "Leave out the title or the artist line when the cover shows it in readable lettering.", hideDup, {
                     hideDup = it; MusicPrefs.setHideDuplicates(c, it); refresh()
