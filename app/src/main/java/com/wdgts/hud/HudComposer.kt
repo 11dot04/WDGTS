@@ -104,9 +104,9 @@ object HudComposer {
         // weather: the renderer gives it its own line under the date when that displaces nothing, else a temperature chip on line 1
         val weather: WeatherInfo? = (if (useSmartspacer) HudSmartspacerSource.weather() else null) ?: HudSources.weather(c, now, zone, today)
         val weatherBlock = weather?.let { HudBlocks.weather(it).copy(optional = true) }
-        val chip = if (weather != null && takeover == null) HudBlocks.temperatureChip(weather.temp, weather.celsius) else emptyList()
+        val chip = if (weather != null && takeover == null) HudBlocks.temperatureChip(weather.temp, weather.celsius, weather.glyphs) else emptyList()
 
-        val blocks = ranked.sortedBy { it.cls }.map { it.block }
+        val blocks = ranked.sortedBy { it.cls }.map { it.block.copy(urgent = it.cls == 0) }
         val badge = headerBadge(c, now, zone, today, zdt.hour)
         val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), badge)
         val headerNoTime = if (takeover == null) HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), badge, showTime = false) else null

@@ -271,7 +271,7 @@ object HudNative {
             line += Text(name, t)
             line += OutlinePill(clock(c, at, zone), t)
         }
-        return Block("sun", listOf(line))
+        return Block("sun", listOf(line), pairable = true)
     }
 
     // ---------------------------------------------------------------- birthdays
@@ -390,7 +390,7 @@ object HudNative {
 
     fun bedBlock(minutes: Long): Block {
         val t = tap(HudSources.SETTINGS)
-        return Block("bed", listOf(listOf<Token>(GlyphToken(HudGlyph.ZZZ, t), Text("BEDTIME IN", t)) + countdown(minutes, t)))
+        return Block("bed", listOf(listOf<Token>(GlyphToken(HudGlyph.ZZZ, t), Text("BEDTIME IN", t)) + countdown(minutes, t)), pairable = true)
     }
 
     /** What the bedtime sync can see, for working out why it does not follow Digital Wellbeing. */
@@ -423,7 +423,7 @@ object HudNative {
         line += IconPill(GlyphKey(HudGlyph.STEPS), t)
         line += OutlinePill("%,d".format(Locale.US, n), t)
         if (reached) line += GlyphToken(HudGlyph.THUMB_UP, t)
-        return Block("steps", listOf(line))
+        return Block("steps", listOf(line), pairable = true)
     }
 
     // ---------------------------------------------------------------- air quality and rain
@@ -447,7 +447,7 @@ object HudNative {
 
     fun aqiBlock(v: Int): Block {
         val t = tap(HudSources.SETTINGS)
-        return Block("aqi", listOf(listOf<Token>(GlyphToken(HudGlyph.MASK, t), Text("AQI", t), OutlinePill("$v", t))))
+        return Block("aqi", listOf(listOf<Token>(GlyphToken(HudGlyph.MASK, t), Text("AQI", t), OutlinePill("$v", t))), pairable = true)
     }
 
     private val RAINING = setOf("RAINY", "DRIZZLE", "SHOWERS", "STORM")
@@ -466,7 +466,7 @@ object HudNative {
 
     fun rainBlock(mins: Long): Block {
         val t = tap(HudSources.SETTINGS)
-        return Block("rain", listOf(listOf<Token>(GlyphToken(HudGlyph.RAIN, t), Text("RAIN IN", t)) + countdown(mins, t)))
+        return Block("rain", listOf(listOf<Token>(GlyphToken(HudGlyph.RAIN, t), Text("RAIN IN", t)) + countdown(mins, t)), pairable = true)
     }
 
     // ---------------------------------------------------------------- next event and alarm
@@ -505,7 +505,7 @@ object HudNative {
 
     fun alarmBlock(mins: Long): Block {
         val t = tap(HudSources.ALARM)
-        return Block("alarm", listOf(listOf<Token>(GlyphToken(HudGlyph.ALARM, t), Text("ALARM IN", t)) + countdown(mins, t)))
+        return Block("alarm", listOf(listOf<Token>(GlyphToken(HudGlyph.ALARM, t), Text("ALARM IN", t)) + countdown(mins, t)), pairable = true)
     }
 
     // ---------------------------------------------------------------- scheduling

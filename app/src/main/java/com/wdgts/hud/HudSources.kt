@@ -246,13 +246,25 @@ object HudSources {
         if (cut === focusKey) return focusValue
         val n = 48
         val small = Bitmap.createScaledBitmap(cut, n, n, true)
-        var sx = 0f; var sy = 0f; var sw = 0f
+        val rows = IntArray(n)
+        val cols = IntArray(n)
         for (y in 0 until n) for (x in 0 until n) {
-            val a = Color.alpha(small.getPixel(x, y)) / 255f
-            if (a > 0.2f) { sx += x * a; sy += y * a; sw += a }
+            if (Color.alpha(small.getPixel(x, y)) / 255f > 0.35f) { rows[y]++; cols[x]++ }
         }
         if (small !== cut) small.recycle()
-        focusValue = if (sw > 0f) ((sx / sw + 0.5f) / n) to ((sy / sw + 0.5f) / n) else (0.5f to 0.5f)
+        // the subject's box, ignoring stray specks (a row or column needs at least two marked cells)
+        val top = rows.indexOfFirst { it >= 2 }
+        val bottom = rows.indexOfLast { it >= 2 }
+        val left = cols.indexOfFirst { it >= 2 }
+        val right = cols.indexOfLast { it >= 2 }
+        focusValue = if (top < 0 || left < 0) (0.5f to 0.5f) else {
+            val t = top.toFloat() / n
+            val b = (bottom + 1).toFloat() / n
+            val cx = (left + right + 1) / 2f / n
+            // a subject taller than the strip is framed from the top (head and shoulders), not by its middle
+            val cy = if (b - t > 0.5f) t + 0.25f else (t + b) / 2f
+            cx to cy
+        }
         focusKey = cut
         return focusValue
     }
@@ -279,11 +291,11 @@ object HudSources {
                  else estimateChargeMs(bm, 80)
         if (ms in 1..(24L * 3_600_000L)) {
             val minutes = (ms / 60_000L).coerceAtLeast(1)
-            return Block("charging", listOf(listOf<Token>(GlyphToken(HudGlyph.USB_C), Text(if (limited) "TO 80% IN" else "FULL IN")) + HudRules.countdownTokens(minutes.toInt())))
+            return Block("charging", listOf(listOf<Token>(GlyphToken(HudGlyph.USB_C), Text(if (limited) "TO 80% IN" else "FULL IN")) + HudRules.countdownTokens(minutes.toInt())), pairable = true)
         }
-        if (level < 0) return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"))))
+        if (level < 0) return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"))), pairable = true)
         val word = if (chargeLimited(bm) && level >= 80) "HELD AT 80%" else "CHARGING"
-        return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text(word), OutlinePill("$level%"))))
+        return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text(word), OutlinePill("$level%"))), pairable = true)
     }
 
     // BatteryManager's charging-policy constants are hidden API (not in the public SDK), so these are their AOSP values.
