@@ -31,8 +31,8 @@ object Cutout {
      */
     fun computeFor(c: Context, art: Bitmap, key: Long, sig: Long): Result {
         val tag = "${java.lang.Long.toHexString(key)}_${java.lang.Long.toHexString(sig)}"
-        val f = File(c.cacheDir, "cutout3_$tag.png")
-        val none = File(c.cacheDir, "cutout3_$tag.none")
+        val f = File(c.cacheDir, "cutout4_$tag.png")
+        val none = File(c.cacheDir, "cutout4_$tag.none")
         if (f.exists()) BitmapFactory.decodeFile(f.path)?.let { return Result.Ok(it, "cached") } ?: f.delete()
         if (none.exists()) return Result.None("cached: ${none.readText()}")
         val fg = try {
@@ -41,14 +41,15 @@ object Cutout {
         } catch (e: Exception) {
             return Result.Retry
         }
-        val why = if (fg == null) "no foreground" else reject(fg, art)
+        val why = if (fg == null) "no foreground" else reject(clean(fg, art), art)
         if (fg == null || why != null) {
             runCatching { none.writeText(why ?: "no foreground") }
             return Result.None(why ?: "no foreground")
         }
-        runCatching { FileOutputStream(f).use { fg.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+        val tidy = clean(fg, art)
+        runCatching { FileOutputStream(f).use { tidy.compress(Bitmap.CompressFormat.PNG, 100, it) } }
         prune(c)
-        return Result.Ok(fg, "new")
+        return Result.Ok(tidy, "new")
     }
 
     /** Why this cut-out is not worth using, or null when it is fine. */
@@ -75,10 +76,78 @@ object Cutout {
         return null
     }
 
-    /** Keeps the newest 60 cut-outs; they are full-size PNGs. */
+    /** Keeps the newest 60 cut-outs; they are full-size PNGs. Files of the earlier versions are not used any more and go. */
     private fun prune(c: Context) {
-        val files = c.cacheDir.listFiles { f -> f.name.startsWith("cutout3_") }?.sortedByDescending { it.lastModified() } ?: return
+        c.cacheDir.listFiles { f -> f.name.startsWith("cutout3_") }?.forEach { it.delete() }
+        val files = c.cacheDir.listFiles { f -> f.name.startsWith("cutout4_") }?.sortedByDescending { it.lastModified() } ?: return
         files.drop(60).forEach { it.delete() }
+    }
+
+    /**
+     * Segmentation leaves specks and pinholes that show up as bites out of the title. Works on a 96 x 96 grid of the mask:
+     * separate islands smaller than 3% of the picture are removed, and small enclosed holes (under 4%) are filled with the
+     * art's own pixels. Soft edges of what stays are kept.
+     */
+    private fun clean(fg: Bitmap, art: Bitmap): Bitmap {
+        val n = 96
+        val small = Bitmap.createScaledBitmap(fg, n, n, true)
+        val px = IntArray(n * n)
+        small.getPixels(px, 0, n, 0, 0, n, n)
+        val on = BooleanArray(n * n) { (px[it] ushr 24) >= 110 }
+        val label = IntArray(n * n)                                       // 0 unvisited, >0 island id
+        val sizes = ArrayList<Int>()
+        val stack = IntArray(n * n)
+        fun flood(start: Int, want: Boolean, id: Int, tag: IntArray): Int {
+            var sp = 0
+            var count = 0
+            stack[sp++] = start; tag[start] = id
+            while (sp > 0) {
+                val i = stack[--sp]
+                count++
+                val x = i % n
+                val y = i / n
+                if (x > 0 && on[i - 1] == want && tag[i - 1] == 0) { tag[i - 1] = id; stack[sp++] = i - 1 }
+                if (x < n - 1 && on[i + 1] == want && tag[i + 1] == 0) { tag[i + 1] = id; stack[sp++] = i + 1 }
+                if (y > 0 && on[i - n] == want && tag[i - n] == 0) { tag[i - n] = id; stack[sp++] = i - n }
+                if (y < n - 1 && on[i + n] == want && tag[i + n] == 0) { tag[i + n] = id; stack[sp++] = i + n }
+            }
+            return count
+        }
+        for (i in 0 until n * n) if (on[i] && label[i] == 0) sizes += flood(i, true, sizes.size + 1, label)
+        if (sizes.isEmpty()) return fg
+        val total = (n * n).toFloat()
+        val largest = sizes.indices.maxByOrNull { sizes[it] }!!
+        val dropIsland = BooleanArray(sizes.size + 1) { it > 0 && sizes[it - 1] / total < 0.03f && it - 1 != largest }
+        // holes: empty regions that do not reach the border
+        val hole = IntArray(n * n)
+        val holeSizes = ArrayList<Int>()
+        val touchesBorder = ArrayList<Boolean>()
+        for (i in 0 until n * n) if (!on[i] && hole[i] == 0) {
+            val id = holeSizes.size + 1
+            holeSizes += flood(i, false, id, hole)
+            var border = false
+            for (j in 0 until n * n) if (hole[j] == id && (j % n == 0 || j % n == n - 1 || j / n == 0 || j / n == n - 1)) { border = true; break }
+            touchesBorder += border
+        }
+        val fillHole = BooleanArray(holeSizes.size + 1) { it > 0 && !touchesBorder[it - 1] && holeSizes[it - 1] / total < 0.04f }
+
+        val w = fg.width
+        val h = fg.height
+        val out = IntArray(w * h)
+        fg.getPixels(out, 0, w, 0, 0, w, h)
+        val artPx = IntArray(w * h)
+        val scaledArt = if (art.width == w && art.height == h) art else Bitmap.createScaledBitmap(art, w, h, true)
+        scaledArt.getPixels(artPx, 0, w, 0, 0, w, h)
+        for (y in 0 until h) {
+            val cy = (y * n / h).coerceIn(0, n - 1)
+            for (x in 0 until w) {
+                val ci = cy * n + (x * n / w).coerceIn(0, n - 1)
+                val i = y * w + x
+                if (on[ci] && dropIsland[label[ci]]) out[i] = 0
+                else if (!on[ci] && fillHole[hole[ci]] && (out[i] ushr 24) < 255) out[i] = artPx[i] or (0xFF shl 24)
+            }
+        }
+        return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
     }
 
     fun compute(c: Context, art: Bitmap, key: Long): Bitmap? {

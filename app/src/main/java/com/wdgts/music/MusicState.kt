@@ -31,6 +31,17 @@ object MusicState {
     /** Stable per-track number: drives the random shape and the random font + axes. */
     val key: Long get() = (title.hashCode().toLong() shl 32) xor (artist.hashCode().toLong() and 0xffffffffL)
 
+    /** The song title without what the player adds to it: (feat. X), - Remastered 2011, (Remix), [Instrumental], (Cover) and the like. */
+    fun cleanTitle(): String {
+        val t = title
+        val kw = "feat|ft|featuring|cover|instrumental|remix|remaster(?:ed)?|version|edit|mix|live|acoustic|demo|bonus|deluxe|radio|extended|original|" +
+            "karaoke|sped up|slowed|reverb|from|soundtrack|ost|explicit|clean|remake|mono|stereo|session|reprise|vip|rework|bootleg|a cappella|acapella"
+        var s = t.replace(Regex("\\s*[\\(\\[\\{][^\\)\\]\\}]*\\b(?:$kw)\\b[^\\)\\]\\}]*[\\)\\]\\}]", RegexOption.IGNORE_CASE), "")
+        s = s.replace(Regex("\\s+[-–—]\\s+(?=.*\\b(?:$kw)\\b).*$", RegexOption.IGNORE_CASE), "")
+        s = s.replace(Regex("\\s+(?:feat\\.?|ft\\.?|featuring)\\s+.*$", RegexOption.IGNORE_CASE), "")
+        return s.trim().ifBlank { t }
+    }
+
     /** What the Depth widget is working from, for working out a wrong cut-out or missing art. */
     fun debug(): String {
         val cut = cutout

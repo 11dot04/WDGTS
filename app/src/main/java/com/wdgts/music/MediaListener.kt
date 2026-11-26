@@ -45,7 +45,7 @@ class MediaListener : NotificationListenerService() {
             }
             // with synced lyrics on a Depth widget, wake up for the next line instead of every five seconds
             val next = if (MusicState.playing && MusicWidgets.depthPlaced(this@MediaListener)) Lyrics.msToNext(MusicState.positionMs()) else -1L
-            handler.postDelayed(this, if (next > 0) next.coerceIn(700L, 5_000L) else 5_000L)
+            handler.postDelayed(this, if (next > 0) next.coerceIn(350L, 5_000L) else 5_000L)
         }
     }
 

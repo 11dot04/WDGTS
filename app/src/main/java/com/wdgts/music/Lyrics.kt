@@ -18,6 +18,10 @@ object MusicPrefs {
     fun buttonStyle(c: Context) = Prefs.raw(c).getInt("music_btn_style", 0)
     fun setButtonStyle(c: Context, v: Int) = Prefs.raw(c).edit().putInt("music_btn_style", v).apply()
 
+    /** Depth: the small artist line above the title (off: the title gets the room). */
+    fun depthArtist(c: Context) = Prefs.raw(c).getBoolean("music_depth_artist", false)
+    fun setDepthArtist(c: Context, on: Boolean) = Prefs.raw(c).edit().putBoolean("music_depth_artist", on).apply()
+
     /** Depth: leave out the title or the artist line when the cover already shows it in readable lettering. */
     fun hideDuplicates(c: Context) = Prefs.raw(c).getBoolean("music_hide_dup", true)
     fun setHideDuplicates(c: Context, on: Boolean) = Prefs.raw(c).edit().putBoolean("music_hide_dup", on).apply()
