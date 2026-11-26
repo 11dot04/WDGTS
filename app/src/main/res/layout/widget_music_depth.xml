@@ -3,9 +3,23 @@
     android:id="@android:id/background"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:background="@drawable/widget_bg">
+    <!-- the cover, title and gradient: the big bitmap, sent when the song or the size changes -->
     <ImageView android:id="@+id/img"
         android:layout_width="match_parent" android:layout_height="match_parent"
         android:scaleType="fitXY" />
+    <!-- the lyric strip and the button row: small bitmaps sent as partial updates.
+         Weights match DepthScene: strip top 60%, height 18.5%, button row 16.5%, bottom margin 5%. -->
+    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="vertical">
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="60" />
+        <ImageView android:id="@+id/img_lyric"
+            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="18.5"
+            android:scaleType="fitXY" android:visibility="gone" />
+        <ImageView android:id="@+id/img_btn"
+            android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="16.5"
+            android:scaleType="fitXY" android:visibility="gone" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="5" />
+    </LinearLayout>
     <FrameLayout android:id="@+id/zone_main"
         android:layout_width="match_parent" android:layout_height="match_parent" />
     <!-- button row, always live: previous | next (left half), play / pause (right half).
