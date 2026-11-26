@@ -176,7 +176,8 @@ object HudPlan {
         val out = ArrayList<Placement>()
         val placed = HashSet<String>()
 
-        fun limit(b: Block) = if (b.optional) minOf(slots, ambientLimit) else slots
+        // the fifth line is scarce: only urgent blocks may reach past the first [ambientLimit] body lines
+        fun limit(b: Block) = if (b.urgent) slots else minOf(slots, ambientLimit)
 
         fun run(from: Int, lim: Int): Int {
             var n = 0
@@ -256,6 +257,42 @@ class LinePacker(private val flow: FlowLayout) {
         return out
     }
 
+    /** Which blocks were folded into which line by [pair], so the caller still learns that each of them got a place. */
+    private val partners = HashMap<String, List<String>>()
+
+    /**
+     * Two pairable blocks whose one-line forms fit side by side become one line (AQI and steps), so the lines come out
+     * closer in length and a line is saved. One partner per line; blocks that are not pairable (music, scores, events)
+     * never take a partner.
+     */
+    private fun pair(blocks: List<Block>, maxW: Float): List<Block> {
+        val out = ArrayList<Block>()
+        val used = HashSet<String>()
+        for ((i, b) in blocks.withIndex()) {
+            if (b.id in used) continue
+            val mine = b.segments.filter { it.isNotEmpty() }
+            if (!b.pairable || mine.size != 1) { out += b; continue }
+            var cur = b
+            for (j in i + 1 until blocks.size) {
+                val o = blocks[j]
+                if (o.id in used || !o.pairable) continue
+                val theirs = o.segments.filter { it.isNotEmpty() }
+                if (theirs.size != 1) continue
+                val joined = mine[0] + Space + Space + theirs[0]
+                if (!flow.fits(joined, maxW)) continue
+                cur = b.copy(
+                    id = b.id + "+" + o.id, segments = listOf(joined), compact = null, folds = emptyList(),
+                    optional = b.optional && o.optional, urgent = b.urgent || o.urgent,
+                )
+                partners[cur.id] = listOf(b.id, o.id)
+                used += o.id
+                break
+            }
+            out += cur
+        }
+        return out
+    }
+
     fun pack(blocks: List<Block>, slots: Int, maxW: Float): List<Line> = packed(blocks, slots, maxW).first
 
     /** The lines, and the ids of the blocks that got a line (an absorbed block counts as placed with the one that absorbed it). */
@@ -263,8 +300,9 @@ class LinePacker(private val flow: FlowLayout) {
         val out = MutableList<Line>(slots) { emptyList() }
         val ids = HashSet<String>()
         var last: HudGlyph? = null
-        for (pl in HudPlan.plan(absorb(blocks, maxW).map { fold(it, maxW) }, slots)) {
+        for (pl in HudPlan.plan(pair(absorb(blocks, maxW).map { fold(it, maxW) }, maxW), slots)) {
             ids += pl.block.id
+            partners[pl.block.id]?.let { ids += it }
             if (pl.compact) {
                 val (toks, g) = ActionPills.apply(pl.block.compact.orEmpty(), last)
                 last = g

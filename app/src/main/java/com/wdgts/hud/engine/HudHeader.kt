@@ -35,13 +35,12 @@ object HudHeader {
 data class WeatherInfo(val temp: Int, val celsius: Boolean, val word: String?, val glyphs: List<HudGlyph> = emptyList(), val tap: TapRef? = null)
 
 object HudBlocks {
-    /** The temperature as a header chip: I◂ 27°(C). Appended to line 1 only if it still fits. */
-    fun temperatureChip(temp: Int, celsius: Boolean): List<Token> = listOf(
-        Space,
-        GlyphToken(HudRules.tempGlyph(HudRules.toFahrenheit(temp, celsius))),
-        Text("$temp°"),
-        GlyphToken(if (celsius) HudGlyph.UNIT_C else HudGlyph.UNIT_F),
-    )
+    /** The temperature as a header chip, led by the weather icons (☀ 27°(C)), or the gauge when there are none. Appended to line 1 only if it still fits. */
+    fun temperatureChip(temp: Int, celsius: Boolean, glyphs: List<HudGlyph> = emptyList()): List<Token> {
+        val lead: List<Token> = if (glyphs.isNotEmpty()) glyphs.map { GlyphToken(it) }
+        else listOf(GlyphToken(HudRules.tempGlyph(HudRules.toFahrenheit(temp, celsius))))
+        return listOf<Token>(Space) + lead + listOf(Text("$temp°"), GlyphToken(if (celsius) HudGlyph.UNIT_C else HudGlyph.UNIT_F))
+    }
 
     /** I◂ 16°(C) 💧 (RAINY) as its own line. Placement is decided by the composer. */
     fun weather(w: WeatherInfo, id: String = "weather"): Block {

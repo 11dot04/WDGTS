@@ -136,6 +136,10 @@ data class Block(
      */
     val absorbs: String? = null,
     val absorbLine: List<Token> = emptyList(),
+    /** Only an urgent block (a live match, a missed call, an event in minutes) may use the fifth line. */
+    val urgent: Boolean = false,
+    /** A short, self-contained line (air quality, steps, rain...) that may share its line with another pairable block when both fit. */
+    val pairable: Boolean = false,
 )
 
 /**
