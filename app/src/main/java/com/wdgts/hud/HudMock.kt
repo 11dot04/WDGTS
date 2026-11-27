@@ -2,6 +2,8 @@ package com.wdgts.hud
 
 import android.content.Context
 import com.wdgts.hud.engine.Block
+import com.wdgts.hud.engine.ChipSegment
+import com.wdgts.hud.engine.Token
 import com.wdgts.sports.Crest
 import com.wdgts.sports.Match
 import com.wdgts.widgets.Sched
@@ -27,6 +29,8 @@ object HudMock {
         Group("Bedtime", listOf(Case("bed", "In 25 min"), Case("bed_close", "In 6 min"))),
         Group("Steps", listOf(Case("steps", "6,432"), Case("steps_goal", "Goal reached"))),
         Group("Air and rain", listOf(Case("aqi", "High AQI"), Case("rain", "Rain soon"))),
+        Group("Battery", listOf(Case("chg_low", "Low 14%"), Case("chg_plug", "Plugging in"), Case("chg_on", "Charging 62%"))),
+        Group("Notifications", listOf(Case("chips2", "Two apps"), Case("chips3", "Three + more"))),
         Group("Event and alarm", listOf(Case("event", "In 40 min"), Case("event_soon", "In 7 min"), Case("event_now", "Now"), Case("alarm", "Alarm"))),
     )
 
@@ -86,6 +90,16 @@ object HudMock {
             "event_soon" -> HudNative.eventBlock("Weekly design sync", 7)
             "event_now" -> HudNative.eventBlock("Weekly design sync", 0)
             "alarm" -> 3 to HudNative.alarmBlock(80)
+            "chg_low" -> HudSources.chargingBlock(14, false, 1f, null, false)?.let { 3 to it }
+            "chg_plug" -> HudSources.chargingBlock(62, true, 0.5f, 45, false)?.let { 3 to it }
+            "chg_on" -> HudSources.chargingBlock(62, true, 1f, 45, false)?.let { 3 to it }
+            "chips2" -> 2 to Block("chips", listOf(listOf<Token>(
+                ChipSegment(AppIconKey("com.whatsapp"), "1", 1), ChipSegment(AppIconKey("com.instagram.android"), "3", 3),
+            )), pairable = true)
+            "chips3" -> 2 to Block("chips", listOf(listOf<Token>(
+                ChipSegment(AppIconKey("com.whatsapp"), "12", 1), ChipSegment(AppIconKey("org.telegram.messenger"), "4", 2),
+                ChipSegment(AppIconKey("com.instagram.android"), "2", 2), ChipSegment(null, "+5", 3),
+            )), pairable = true)
             else -> null
         }
     }

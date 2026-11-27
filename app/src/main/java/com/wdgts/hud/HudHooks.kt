@@ -34,6 +34,11 @@ class HudHooks(private val c: Context) {
                     if (Prefs.hudUnlockDay(c) != day) Prefs.setHudUnlock(c, day, now)       // first unlock of the day
                     HudRelevance.onUnlock(c)
                 }
+                Intent.ACTION_POWER_CONNECTED -> {
+                    HudSignals.plugAt = System.currentTimeMillis()
+                    for (i in 0..6) handler.postDelayed({ refresh() }, i * 120L)       // the frames of the plug going in
+                }
+                Intent.ACTION_POWER_DISCONNECTED -> refresh()
                 Intent.ACTION_SCREEN_ON -> {
                     if (now - HudSignals.lastScreenOff > 20_000L || HudSignals.screenOnSince == 0L) HudSignals.screenOnSince = now
                     HudSmartspacerSource.onScreen(true)
@@ -73,6 +78,7 @@ class HudHooks(private val c: Context) {
         val f = IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT); addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_TIME_TICK)
+            addAction(Intent.ACTION_POWER_CONNECTED); addAction(Intent.ACTION_POWER_DISCONNECTED)
         }
         c.registerReceiver(receiver, f, Context.RECEIVER_NOT_EXPORTED)
         runCatching { c.getSystemService(CameraManager::class.java).registerTorchCallback(torch, handler) }

@@ -16,6 +16,7 @@ import android.provider.CalendarContract
 import com.wdgts.core.Prefs
 import com.wdgts.data.Http
 import com.wdgts.hud.engine.Block
+import com.wdgts.hud.engine.ChipSegment
 import com.wdgts.hud.engine.GlyphToken
 import com.wdgts.hud.engine.HudGlyph
 import com.wdgts.hud.engine.HudRules
@@ -421,10 +422,9 @@ object HudNative {
     fun stepsBlock(n: Int, reached: Boolean): Block {
         val t = tap(HudSources.SETTINGS)
         val line = ArrayList<Token>()
-        line += IconPill(GlyphKey(HudGlyph.STEPS), t)
-        line += OutlinePill("%,d".format(Locale.US, n), t)
+        line += ChipSegment(GlyphKey(HudGlyph.STEPS), "%,d".format(Locale.US, n), 0, t)
         if (reached) line += GlyphToken(HudGlyph.THUMB_UP, t)
-        return Block("steps", listOf(line), pairable = true)
+        return Block("steps", listOf(line), pairable = true, droppable = true)
     }
 
     // ---------------------------------------------------------------- air quality and rain

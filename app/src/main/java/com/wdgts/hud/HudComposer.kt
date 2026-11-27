@@ -83,7 +83,7 @@ object HudComposer {
             HudNative.rain(c, now)?.let { ranked += Ranked(1, it) }
             if (target?.kind != "calendar") HudNative.event(c, now)?.let { (cls, b) -> ranked += Ranked(cls, b) }
             HudNative.alarm(c, now)?.let { ranked += Ranked(3, it.copy(optional = true)) }
-            HudNative.steps(c)?.let { ranked += Ranked(3, it.copy(optional = true)) }
+            HudNative.steps(c)?.let { ranked += Ranked(4, it.copy(optional = true)) }
         }
 
         // a greeting takes over line 1 while it is allowed

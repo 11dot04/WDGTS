@@ -21,6 +21,8 @@ import com.wdgts.hud.engine.MoonPhase
 import com.wdgts.hud.engine.OutlinePill
 import com.wdgts.hud.engine.ProgressMark
 import com.wdgts.hud.engine.Token
+import com.wdgts.hud.engine.ChargePill
+import com.wdgts.hud.engine.ChipSegment
 import com.wdgts.hud.engine.DotGrid
 import com.wdgts.hud.engine.DotRow
 import com.wdgts.hud.engine.Tally
@@ -160,21 +162,20 @@ object HudSources {
         if (sms > 0) Telephony.Sms.getDefaultSmsPackage(c)?.takeIf { it in allowed }?.let { counts[it] = sms }
         if (counts.isEmpty()) return null
         val tokens = ArrayList<Token>()
-        counts.entries.sortedByDescending { it.value }.take(3).forEachIndexed { rank, (pkg, n) ->
+        val sorted = counts.entries.sortedByDescending { it.value }
+        val shown = sorted.take(3)
+        val rest = sorted.drop(3).sumOf { it.value }
+        val total = shown.size + (if (rest > 0) 1 else 0)
+        fun role(i: Int) = if (total == 1) 0 else if (i == 0) 1 else if (i == total - 1) 3 else 2
+        shown.forEachIndexed { i, (pkg, n) ->
             val t = tap(APP_PREFIX + pkg)
             val count = if (n > 99) "99+" else n.toString()
-            val key = AppIconKey(pkg)
-            if (GlyphMask.forPackage(c, pkg) == null) {
-                tokens += OutlinePill("${label(c, pkg)} $count", t)
-                return@forEachIndexed
-            }
-            when (rank) {
-                0 -> { tokens += IconPill(key, t); tokens += CountRing(count, t) }       // [icon] (3)
-                1 -> tokens += Chip(key, count, t)                                       // ( icon 3 )
-                else -> { tokens += Icon(key, t); tokens += Badge(BadgeShape.BURST, count, t) }   // icon (burst 3)
-            }
+            // one connected group, like a button group: [icon 1][icon 3]; an app with no glyph gets its name instead
+            tokens += if (GlyphMask.forPackage(c, pkg) != null) ChipSegment(AppIconKey(pkg), count, role(i), t)
+            else ChipSegment(null, "${label(c, pkg)} $count", role(i), t)
         }
-        return Block("chips", listOf(tokens))
+        if (rest > 0) tokens += ChipSegment(null, "+$rest", role(total - 1), tap(SETTINGS))
+        return Block("chips", listOf(tokens), pairable = true)
     }
 
     private fun label(c: Context, pkg: String): String =
@@ -290,19 +291,31 @@ object HudSources {
      */
     fun charging(c: Context): Block? {
         val bi = c.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null
-        if (bi.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) == 0) return null
+        val plugged = bi.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
         val bm = c.getSystemService(BatteryManager::class.java)
         val level = bi.getIntExtra(BatteryManager.EXTRA_LEVEL, -1).let { l -> if (l < 0) -1 else l * 100 / bi.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) }
+        if (!plugged) return chargingBlock(level, false, 1f, null, false)
         val limited = chargeLimited(bm) && level in 0..79
         val ms = if (!limited) bm.computeChargeTimeRemaining().takeIf { it > 0 } ?: estimateChargeMs(bm, 100)
                  else estimateChargeMs(bm, 80)
-        if (ms in 1..(24L * 3_600_000L)) {
-            val minutes = (ms / 60_000L).coerceAtLeast(1)
-            return Block("charging", listOf(listOf<Token>(GlyphToken(HudGlyph.USB_C), Text(if (limited) "TO 80% IN" else "FULL IN")) + HudRules.countdownTokens(minutes.toInt())), pairable = true)
+        val minutes = if (ms in 1..(24L * 3_600_000L)) (ms / 60_000L).coerceAtLeast(1).toInt() else null
+        val held = chargeLimited(bm) && level >= 80
+        return chargingBlock(level, true, HudSignals.plugProgress(System.currentTimeMillis()), minutes, limited, held)
+    }
+
+    /**
+     * The charging complication: the USB-C socket as a battery. It shows when plugged in, and unplugged only when the
+     * charge is low (20% or less), as a nudge. [progress] animates the plug going in. Also used for the test samples.
+     */
+    fun chargingBlock(level: Int, plugged: Boolean, progress: Float, minutes: Int?, limited: Boolean, held: Boolean = false): Block? {
+        val t = tap(SETTINGS)
+        if (!plugged) return if (level in 0..20) Block("charging", listOf(listOf<Token>(ChargePill(level, false, 1f, t))), pairable = true) else null
+        val pill = ChargePill(level, true, progress, t)
+        if (minutes != null) {
+            return Block("charging", listOf(listOf<Token>(pill, Text(if (limited) "TO 80% IN" else "FULL IN", t)) + HudRules.countdownTokens(minutes, t)), pairable = true)
         }
-        if (level < 0) return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text("CHARGING"))), pairable = true)
-        val word = if (chargeLimited(bm) && level >= 80) "HELD AT 80%" else "CHARGING"
-        return Block("charging", listOf(listOf(GlyphToken(HudGlyph.USB_C), Text(word), OutlinePill("$level%"))), pairable = true)
+        if (level < 0) return Block("charging", listOf(listOf<Token>(GlyphToken(HudGlyph.USB_C), Text("CHARGING", t))), pairable = true)
+        return Block("charging", listOf(listOf<Token>(pill, Text(if (held) "HELD AT 80%" else "CHARGING", t))), pairable = true)
     }
 
     // BatteryManager's charging-policy constants are hidden API (not in the public SDK), so these are their AOSP values.

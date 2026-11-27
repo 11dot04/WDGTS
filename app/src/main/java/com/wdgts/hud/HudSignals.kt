@@ -7,6 +7,14 @@ import android.service.notification.StatusBarNotification
 
 /** Live signals the HUD reads. Written by [HudHooks] and the notification listener; no persistence needed. */
 object HudSignals {
+    /** When the charger was last plugged in; the charging pill animates for the first 700 ms after. */
+    @Volatile var plugAt = 0L
+    fun plugProgress(now: Long): Float {
+        if (plugAt == 0L) return 1f
+        val d = now - plugAt
+        return if (d >= 700L) 1f else (d / 700f).coerceIn(0f, 1f)
+    }
+
     @Volatile var screenOnSince = 0L
     @Volatile var lastScreenOff = 0L
     @Volatile var lookDismissedAt = 0L
