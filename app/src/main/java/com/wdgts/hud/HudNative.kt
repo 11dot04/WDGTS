@@ -234,7 +234,8 @@ object HudNative {
     private fun tap(action: String) = TapRef(HudSources.LOCAL, action)
     private const val MIN = 60_000L
 
-    private fun countdown(minutes: Long, tap: TapRef?): List<Token> = HudRules.countdownTokens(minutes.coerceAtLeast(1L).toInt(), tap)
+    private fun countdown(minutes: Long, tap: TapRef?, hands: Boolean = false): List<Token> =
+        HudRules.countdownTokens(minutes.coerceAtLeast(1L).toInt(), tap, hands)
 
     private fun minutesUntil(at: Long, now: Long) = (at - now + MIN - 1) / MIN
 
@@ -271,7 +272,7 @@ object HudNative {
             line += Text(name, t)
             line += OutlinePill(clock(c, at, zone), t)
         }
-        return Block("sun", listOf(line), pairable = true)
+        return Block("sun", listOf(line), pairable = true, group = "weather")
     }
 
     // ---------------------------------------------------------------- birthdays
@@ -447,7 +448,7 @@ object HudNative {
 
     fun aqiBlock(v: Int): Block {
         val t = tap(HudSources.SETTINGS)
-        return Block("aqi", listOf(listOf<Token>(GlyphToken(HudGlyph.MASK, t), Text("AQI", t), OutlinePill("$v", t))), pairable = true)
+        return Block("aqi", listOf(listOf<Token>(GlyphToken(HudGlyph.MASK, t), Text("AQI", t), OutlinePill("$v", t))), pairable = true, group = "weather")
     }
 
     private val RAINING = setOf("RAINY", "DRIZZLE", "SHOWERS", "STORM")
@@ -466,7 +467,7 @@ object HudNative {
 
     fun rainBlock(mins: Long): Block {
         val t = tap(HudSources.SETTINGS)
-        return Block("rain", listOf(listOf<Token>(GlyphToken(HudGlyph.RAIN, t), Text("RAIN IN", t)) + countdown(mins, t)), pairable = true)
+        return Block("rain", listOf(listOf<Token>(GlyphToken(HudGlyph.RAIN, t), Text("RAIN IN", t)) + countdown(mins, t)), pairable = true, group = "weather")
     }
 
     // ---------------------------------------------------------------- next event and alarm
@@ -489,7 +490,7 @@ object HudNative {
     fun eventBlock(title: String, mins: Long): Pair<Int, Block> {
         val t = tap(HudSources.EVENT)
         val first = listOf<Token>(GlyphToken(HudGlyph.SPEAK, t), Text(title.uppercase(Locale.getDefault()), t), GlyphToken(HudGlyph.FOLLOWUP, t))
-        val second: List<Token> = if (mins <= 0) listOf(Text("STARTING NOW", t)) else listOf<Token>(Text("STARTING IN", t)) + countdown(mins, t)
+        val second: List<Token> = if (mins <= 0) listOf(Text("STARTING NOW", t)) else listOf<Token>(Text("STARTING IN", t)) + countdown(mins, t, hands = true)
         return (if (mins <= 10) 0 else 3) to Block("event", listOf(first, second), kind = "calendar")
     }
 
@@ -505,7 +506,7 @@ object HudNative {
 
     fun alarmBlock(mins: Long): Block {
         val t = tap(HudSources.ALARM)
-        return Block("alarm", listOf(listOf<Token>(GlyphToken(HudGlyph.ALARM, t), Text("ALARM IN", t)) + countdown(mins, t)), pairable = true)
+        return Block("alarm", listOf(listOf<Token>(GlyphToken(HudGlyph.ALARM, t), Text("ALARM IN", t)) + countdown(mins, t, hands = true)), pairable = true)
     }
 
     // ---------------------------------------------------------------- scheduling

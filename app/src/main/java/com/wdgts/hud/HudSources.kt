@@ -21,7 +21,9 @@ import com.wdgts.hud.engine.MoonPhase
 import com.wdgts.hud.engine.OutlinePill
 import com.wdgts.hud.engine.ProgressMark
 import com.wdgts.hud.engine.Token
+import com.wdgts.hud.engine.DotGrid
 import com.wdgts.hud.engine.DotRow
+import com.wdgts.hud.engine.Tally
 import com.wdgts.hud.engine.GlyphToken
 import com.wdgts.hud.engine.HudGlyph
 import com.wdgts.hud.engine.HudRules
@@ -133,12 +135,17 @@ object HudSources {
         if (left <= 0) return null
         val t = tap(SETTINGS)
         val minutes = ((today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - now) / 60_000L).coerceAtLeast(1)
+        val marks: List<Token> = when (HudPrefs.streakMarks(c)) {
+            HudPrefs.MARKS_TALLY -> listOf(Tally(done, total, t))
+            HudPrefs.MARKS_HANDS -> HudRules.hands(left.coerceAtMost(10)).map { GlyphToken(it, t) }
+            else -> listOf(DotGrid(done, total, t))
+        }
+        val end = HudRules.countdownTokens(minutes.toInt(), t)
+        // one line: "3 LEFT", the marks and the time to midnight; the longer wording is used when it fits
         return Block(
             "streaks",
-            listOf(
-                listOf(Text("$left STREAK${if (left > 1) "S" else ""} LEFT", t)),
-                listOf<Token>(DotRow(done, total, t)) + HudRules.countdownTokens(minutes.toInt(), t),
-            ),
+            listOf(listOf<Token>(Text("$left LEFT", t)) + marks + end),
+            folds = listOf(listOf<Token>(Text("$left STREAK${if (left > 1) "S" else ""} LEFT", t)) + marks + end),
         )
     }
 
@@ -273,7 +280,7 @@ object HudSources {
     fun isPlayingTitle(text: String): Boolean {
         if (!(MusicState.hasSession && MusicState.playing)) return false
         val t = text.trim()
-        return t.equals(MusicState.title.trim(), ignoreCase = true) || t.equals(HudText.cleanTitle(MusicState.title), ignoreCase = true)
+        return t.equals(MusicState.title.trim(), ignoreCase = true) || MusicState.clean(t).equals(MusicState.title, ignoreCase = true)
     }
 
     /**

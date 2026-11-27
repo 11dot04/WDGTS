@@ -85,6 +85,16 @@ object HudPrefs {
     fun showBounds(c: Context) = sp(c).getBoolean("show_bounds", false)
     fun setShowBounds(c: Context, on: Boolean) = sp(c).edit().putBoolean("show_bounds", on).apply()
 
+    // ---------------------------------------------------------------- streak marks
+
+    const val MARKS_DOTS = 0
+    const val MARKS_TALLY = 1
+    const val MARKS_HANDS = 2
+
+    /** What the streaks line shows: two staggered rows of dots, tally marks, or finger-counting hands. */
+    fun streakMarks(c: Context) = sp(c).getInt("streak_marks", MARKS_DOTS)
+    fun setStreakMarks(c: Context, v: Int) = sp(c).edit().putInt("streak_marks", v).apply()
+
     // ---------------------------------------------------------------- data source
 
     const val SOURCE_BOTH = 0

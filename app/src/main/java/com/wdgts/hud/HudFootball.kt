@@ -5,6 +5,7 @@ import android.text.format.DateFormat
 import com.wdgts.core.Prefs
 import com.wdgts.hud.engine.Block
 import com.wdgts.hud.engine.Icon
+import com.wdgts.hud.engine.OutlinePill
 import com.wdgts.hud.engine.ScorePill
 import com.wdgts.hud.engine.TapRef
 import com.wdgts.hud.engine.Text
@@ -110,7 +111,7 @@ object HudFootball {
             if (withCrests && mode != CREST_OFF && m.homeLogo.isNotBlank()) out += Icon(CrestKey(m.homeLogo, mode), t)
             out += Text(m.homeAbbr.uppercase(Locale.getDefault()), t)
             if (shown) out += number(m.homeScore.ifBlank { "0" }, 1)
-            out += ScorePill(middle(c, m, zone), t)
+            out += if (scorer != 0) OutlinePill(middle(c, m, zone), t) else ScorePill(middle(c, m, zone), t)
             if (shown) out += number(m.awayScore.ifBlank { "0" }, 2)
             out += Text(m.awayAbbr.uppercase(Locale.getDefault()), t)
             if (withCrests && mode != CREST_OFF && m.awayLogo.isNotBlank()) out += Icon(CrestKey(m.awayLogo, mode), t)

@@ -55,7 +55,7 @@ object HudComposer {
         val greetingOk = greetingAllowed(c, now, zdt.hour, today)
 
         val ranked = ArrayList<Ranked>()
-        HudSources.missedCalls()?.let { ranked += Ranked(0, it) }
+        HudSources.missedCalls()?.let { ranked += Ranked(0, it.copy(tail = true)) }
         val target = if (useSmartspacer) HudSmartspacerSource.top(c) { b -> adjustTarget(b, greetingOk) } else null
         target?.let { ranked += Ranked(1, it) }
         if (useSmartspacer) HudSmartspacerSource.extras(c, target?.id)?.let { ranked += Ranked(2, it) }   // independent complications fill what is left
@@ -63,7 +63,7 @@ object HudComposer {
         HudSources.lookAway(now)?.let { ranked += Ranked(1, it) }
         HudSources.streaks(c, now, zone, today, zdt.hour)?.let { ranked += Ranked(1, it) }
         HudSources.tithi(c, now, zone, today)?.let { ranked += Ranked(2, it.copy(optional = true)) }
-        HudSources.chips(c)?.let { ranked += Ranked(2, it.copy(optional = true)) }
+        HudSources.chips(c)?.let { ranked += Ranked(2, it.copy(optional = true, tail = true)) }
         HudSources.charging(c)?.let { ranked += Ranked(3, it.copy(optional = true)) }
 
         // a sample complication from the test screen goes first, whatever the data source is
@@ -106,7 +106,13 @@ object HudComposer {
         val weatherBlock = weather?.let { HudBlocks.weather(it).copy(optional = true) }
         val chip = if (weather != null && takeover == null) HudBlocks.temperatureChip(weather.temp, weather.celsius, weather.glyphs) else emptyList()
 
-        val blocks = ranked.sortedBy { it.cls }.map { it.block.copy(urgent = it.cls == 0) }
+        // only music and events (calendar-like targets) may take two lines; everything else gets its one-line form
+        fun oneLine(b: Block): Block {
+            val lines = b.segments.filter { it.isNotEmpty() }
+            if (lines.size <= 1 || b.id == "music" || b.kind == "calendar") return b
+            return b.copy(segments = listOf(b.compact ?: lines[0]), compact = null)
+        }
+        val blocks = ranked.sortedBy { it.cls }.map { oneLine(it.block.copy(urgent = it.cls == 0)) }
         val badge = headerBadge(c, now, zone, today, zdt.hour)
         val header = takeover ?: HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), badge)
         val headerNoTime = if (takeover == null) HudHeader.tokens(zdt, DateFormat.is24HourFormat(c), badge, showTime = false) else null
