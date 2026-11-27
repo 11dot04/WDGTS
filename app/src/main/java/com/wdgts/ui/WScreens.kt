@@ -154,6 +154,7 @@ private fun HudScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
     var you by remember { mutableStateOf(HudPrefs.materialYou(c)) }
     var source by remember { mutableIntStateOf(HudPrefs.source(c)) }
     var edge by remember { mutableIntStateOf(HudPrefs.edge(c)) }
+    var streakMarks by remember { mutableIntStateOf(HudPrefs.streakMarks(c)) }
     var bounds by remember { mutableStateOf(HudPrefs.showBounds(c)) }
 
     WSubFrame(onBack, pinned = { PreviewStage(listOf(Kinds.Hud)) }) {
@@ -185,6 +186,9 @@ private fun HudScreen(onBack: () -> Unit, go: (Screen) -> Unit) {
         WLabel("Layout")
         WCard("Edge padding", "The air between the text and the widget's edge. Auto goes tight where the launcher already pads the widget (2 rows or taller).", on = null) {
             WPick(listOf("Tight", "Normal", "Roomy", "Auto"), edge) { edge = it; HudPrefs.setEdge(c, it); refresh() }
+        }
+        WCard("Streaks line", "How the streaks left tonight are marked, on one line.", on = null) {
+            WPick(listOf("Two rows of dots", "Tally marks", "Finger counting"), streakMarks) { streakMarks = it; HudPrefs.setStreakMarks(c, it); refresh() }
         }
         WCard("Date line", "Between the month and the time. The Nothing clock puts a time-zone burst there.", on = null) {
             WPick(listOf("Nothing", "Sun or moon (day / night)", "Time zone, always", "Time zone, only away from home"), badge) {
