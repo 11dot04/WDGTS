@@ -28,9 +28,9 @@ object HudRules {
         }
     }
 
-    /** Every countdown on the HUD: the hands up to ten minutes (7 = peace sign + open hand), then the bracket with the time. */
-    fun countdownTokens(minutes: Int, tap: TapRef? = null): List<Token> =
-        hands(minutes).map<HudGlyph, Token> { GlyphToken(it, tap) } + Timer(timerText(minutes), tap)
+    /** Every countdown on the HUD: the bracket with the time, and for events only ([hands]) the hands up to ten minutes (7 = peace sign + open hand). */
+    fun countdownTokens(minutes: Int, tap: TapRef? = null, withHands: Boolean = false): List<Token> =
+        (if (withHands) hands(minutes) else emptyList()).map<HudGlyph, Token> { GlyphToken(it, tap) } + Timer(timerText(minutes), tap)
 
     fun hands(n: Int, maxHands: Int = 2): List<HudGlyph> {
         if (n <= 0 || n > 10) return emptyList()

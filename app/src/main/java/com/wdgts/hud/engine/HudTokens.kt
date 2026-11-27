@@ -88,6 +88,12 @@ data class Chip(val icon: Any, val text: String, override val tap: TapRef? = nul
 /** A row of dots: [done] filled, the rest outlined (progress such as streaks). */
 data class DotRow(val done: Int, val total: Int, override val tap: TapRef? = null) : Token
 
+/** The same dots as [DotRow] in two staggered rows, diagonally stacked, so a long row takes half the width. */
+data class DotGrid(val done: Int, val total: Int, override val tap: TapRef? = null) : Token
+
+/** Tally marks: four bars and a slash per five. Done ones are solid, the rest thin. */
+data class Tally(val done: Int, val total: Int, override val tap: TapRef? = null) : Token
+
 /** Rounded corner bracket + underline with text above it (the "7MIN" countdown). */
 data class Timer(val text: String, override val tap: TapRef? = null) : Token
 
@@ -140,6 +146,10 @@ data class Block(
     val urgent: Boolean = false,
     /** A short, self-contained line (air quality, steps, rain...) that may share its line with another pairable block when both fit. */
     val pairable: Boolean = false,
+    /** Pairing prefers a partner from the same group (rain, air quality and sunrise/sunset are all "weather"). */
+    val group: String? = null,
+    /** Goes on the last line of the content, after everything else (calls and notification chips), but keeps its place when space is short. */
+    val tail: Boolean = false,
 )
 
 /**

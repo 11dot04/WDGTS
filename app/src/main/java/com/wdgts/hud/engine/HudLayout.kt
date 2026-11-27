@@ -19,6 +19,8 @@ class FlowLayout(
         is GlyphToken -> glyphSize(t.glyph).first
         is Chip -> Hud.CHIP_PAD_L + Hud.CHIP_ICON + Hud.CHIP_GAP + m.pill(t.text) + Hud.CHIP_PAD_R
         is DotRow -> t.total * Hud.DOT + (t.total - 1).coerceAtLeast(0) * Hud.DOT_GAP
+        is DotGrid -> ((t.total + 1) / 2) * Hud.DOT * 0.95f + Hud.DOT * 0.5f
+        is Tally -> tallyWidth(t.total)
         is IconPill -> Hud.ICONPILL_W
         is CountRing -> maxOf(Hud.PILL_H, m.pill(t.text) + 4.6f)
         is Badge -> if (t.shape == BadgeShape.CIRCLE) Hud.PILL_H else if (t.text.length <= 2) Hud.BADGE_D else Hud.BADGE_WIDE
@@ -42,7 +44,7 @@ class FlowLayout(
         (a is OutlinePill || a is Chip) && (b is OutlinePill || b is Chip) -> 1.6f
         a is IconPill && (b is OutlinePill || b is CountRing) -> 0.8f
         a is GlyphToken && b is GlyphToken && a.glyph.isWeather && b.glyph.isWeather -> 0.8f
-        a is DotRow || b is DotRow -> 3f
+        a is DotRow || b is DotRow || a is DotGrid || b is DotGrid || a is Tally || b is Tally -> 3f
         a is GlyphToken && b is GlyphToken && a.glyph.isHand && b.glyph.isHand -> 3.5f
         else -> 2.6f
     }
@@ -137,24 +139,28 @@ class FlowLayout(
 }
 
 /**
- * The action pill at the end of a line takes turns between the follow-up pill, the add pill and the plain north-east
- * arrow, so a screen full of targets does not show a column of identical pills. The choice is stable per line (it
- * comes from the line's own text), and never the same as the pill on the line before. All three fire the same tap.
+ * The action pill at the end of a line: the follow-up pill, the plain north-east arrow, or the add pill. Events and music
+ * always keep the follow-up pill. The add pill is the least obvious, so it only appears where adding makes sense (a
+ * reminder, a task, a note, a booking). Otherwise the pill takes turns between follow-up and arrow, so a screen full of
+ * targets does not show a column of identical pills. The choice is stable per line (it comes from the line's own text),
+ * and never the same as the pill on the line before. All of them fire the same tap.
  */
 object ActionPills {
-    private val CYCLE = listOf(HudGlyph.FOLLOWUP, HudGlyph.ADD, HudGlyph.ARROW_NE)
+    private val ADDABLE = Regex("""(?i)remind|task|note|to-?do|list|add|new |book|reserv|ticket|appointment|save|schedule""")
 
-    fun pick(seed: String, previous: HudGlyph?): HudGlyph {
-        var i = Math.floorMod(seed.hashCode(), CYCLE.size)
-        if (CYCLE[i] == previous) i = (i + 1) % CYCLE.size
-        return CYCLE[i]
+    fun pick(seed: String, previous: HudGlyph?, allowAdd: Boolean = false): HudGlyph {
+        val cycle = if (allowAdd) listOf(HudGlyph.FOLLOWUP, HudGlyph.ADD, HudGlyph.ARROW_NE) else listOf(HudGlyph.FOLLOWUP, HudGlyph.ARROW_NE)
+        var i = Math.floorMod(seed.hashCode(), cycle.size)
+        if (cycle[i] == previous) i = (i + 1) % cycle.size
+        return cycle[i]
     }
 
     /** Swaps the follow-up pill in [tokens] for this line's pick; returns the new tokens and the glyph used (or [previous] if the line has none). */
-    fun apply(tokens: List<Token>, previous: HudGlyph?): Pair<List<Token>, HudGlyph?> {
+    fun apply(tokens: List<Token>, previous: HudGlyph?, block: Block? = null): Pair<List<Token>, HudGlyph?> {
         if (tokens.none { it is GlyphToken && it.glyph == HudGlyph.FOLLOWUP }) return tokens to previous
+        if (block != null && (block.kind == "calendar" || block.id == "event" || block.id == "music")) return tokens to previous
         val seed = tokens.filterIsInstance<Text>().joinToString(" ") { it.text }
-        val g = pick(seed, previous)
+        val g = pick(seed, previous, ADDABLE.containsMatchIn(seed))
         return tokens.map { if (it is GlyphToken && it.glyph == HudGlyph.FOLLOWUP) GlyphToken(g, it.tap) else it } to g
     }
 }
@@ -172,6 +178,21 @@ object HudPlan {
     private fun segs(b: Block) = b.segments.filter { it.isNotEmpty() }
 
     fun plan(blocks: List<Block>, slots: Int, ambientLimit: Int = Hud.AMBIENT_BODY_LINES): List<Placement> {
+        val tail = blocks.filter { it.tail && segs(it).isNotEmpty() }
+        if (tail.isNotEmpty() && slots > 0) {
+            // calls and chips keep a line for themselves, but sit right after the content, where a last line reads strongest
+            val main = plan(blocks.filter { !(it.tail && segs(it).isNotEmpty()) }, maxOf(0, slots - tail.size), ambientLimit)
+            var at = main.maxOfOrNull { it.start + it.lines } ?: 0
+            val out = ArrayList(main)
+            for (b in tail) {
+                if (at >= slots) break
+                val n = segs(b).size
+                val take = minOf(n, slots - at)
+                out += Placement(b, at, take, compact = b.compact != null && take < n)
+                at += take
+            }
+            return out.sortedBy { it.start }
+        }
         val free = BooleanArray(slots) { true }
         val out = ArrayList<Placement>()
         val placed = HashSet<String>()
@@ -273,7 +294,10 @@ class LinePacker(private val flow: FlowLayout) {
             val mine = b.segments.filter { it.isNotEmpty() }
             if (!b.pairable || mine.size != 1) { out += b; continue }
             var cur = b
-            for (j in i + 1 until blocks.size) {
+            // a partner from the same group first (weather with weather), then whatever else is pairable
+            val order = (i + 1 until blocks.size).filter { blocks[it].group != null && blocks[it].group == b.group } +
+                (i + 1 until blocks.size).filter { !(blocks[it].group != null && blocks[it].group == b.group) }
+            for (j in order) {
                 val o = blocks[j]
                 if (o.id in used || !o.pairable) continue
                 val theirs = o.segments.filter { it.isNotEmpty() }
@@ -282,7 +306,7 @@ class LinePacker(private val flow: FlowLayout) {
                 if (!flow.fits(joined, maxW)) continue
                 cur = b.copy(
                     id = b.id + "+" + o.id, segments = listOf(joined), compact = null, folds = emptyList(),
-                    optional = b.optional && o.optional, urgent = b.urgent || o.urgent,
+                    optional = b.optional && o.optional, urgent = b.urgent || o.urgent, tail = b.tail && o.tail,
                 )
                 partners[cur.id] = listOf(b.id, o.id)
                 used += o.id
@@ -304,14 +328,14 @@ class LinePacker(private val flow: FlowLayout) {
             ids += pl.block.id
             partners[pl.block.id]?.let { ids += it }
             if (pl.compact) {
-                val (toks, g) = ActionPills.apply(pl.block.compact.orEmpty(), last)
+                val (toks, g) = ActionPills.apply(pl.block.compact.orEmpty(), last, pl.block)
                 last = g
                 out[pl.start] = flow.layout(toks, maxW, 1).firstOrNull() ?: emptyList()
                 continue
             }
             val s = pl.block.segments.filter { it.isNotEmpty() }
             for (i in 0 until pl.lines) {
-                val (toks, g) = ActionPills.apply(s[i], last)
+                val (toks, g) = ActionPills.apply(s[i], last, pl.block)
                 last = g
                 out[pl.start + i] = flow.layout(toks, maxW, 1).firstOrNull() ?: emptyList()
             }
@@ -352,4 +376,19 @@ object HudHits {
         }
         return segs.map { Span(it.x0, it.x1, it.tap) }
     }
+}
+
+
+/** Width of [total] tally marks in design units: 2.8 per bar, a slash on every fifth, 2.4 between groups. */
+internal fun tallyWidth(total: Int): Float {
+    if (total <= 0) return 0f
+    val groups = (total + 4) / 5
+    var w = 0f
+    var left = total
+    for (g in 0 until groups) {
+        val bars = minOf(left, 5)
+        left -= bars
+        w += (minOf(bars, 4) * 2.8f) + (if (bars == 5) 0.6f else 0f) + (if (g < groups - 1) 2.4f else 0f)
+    }
+    return w
 }

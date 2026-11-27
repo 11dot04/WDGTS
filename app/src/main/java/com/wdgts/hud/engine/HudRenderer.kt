@@ -232,6 +232,48 @@ class HudRenderer(
                     if (n < t.done) c.drawCircle(cx, cy, d / 2f, fill) else c.drawCircle(cx, cy, (d - Hud.STROKE * u) / 2f, stroke)
                 }
             }
+            is DotGrid -> {
+                val d = Hud.DOT * 0.78f * u
+                val step = Hud.DOT * 0.95f * u
+                val off = d * 0.58f
+                stroke.strokeWidth = Hud.STROKE * u * 0.85f
+                stroke.color = ink
+                fill.color = ink
+                for (n in 0 until t.total) {
+                    val px = x + (n / 2) * step + (if (n % 2 == 1) step / 2f else 0f) + d / 2f
+                    val py = if (n % 2 == 0) cy - off else cy + off
+                    if (n < t.done) c.drawCircle(px, py, d / 2f, fill) else c.drawCircle(px, py, (d - stroke.strokeWidth) / 2f, stroke)
+                }
+            }
+            is Tally -> {
+                val bar = Hud.STROKE * u * 0.9f
+                val thin = bar * 0.45f
+                val hgt = Hud.PILL_H * u * 0.74f
+                stroke.color = ink
+                stroke.strokeCap = Paint.Cap.ROUND
+                var px = x + bar / 2f
+                var left = t.total
+                var drawn = 0
+                while (left > 0) {
+                    val bars = minOf(left, 5)
+                    val gx = px
+                    for (i in 0 until minOf(bars, 4)) {
+                        stroke.strokeWidth = if (drawn < t.done) bar else thin
+                        c.drawLine(px, cy - hgt / 2f, px, cy + hgt / 2f, stroke)
+                        drawn++
+                        px += 2.8f * u
+                    }
+                    if (bars == 5) {
+                        stroke.strokeWidth = if (drawn < t.done) bar else thin
+                        c.drawLine(gx - 0.9f * u, cy + hgt * 0.42f, px - 2.8f * u + 0.9f * u, cy - hgt * 0.42f, stroke)
+                        drawn++
+                        px += 0.6f * u
+                    }
+                    px += 2.4f * u
+                    left -= bars
+                }
+                stroke.strokeCap = Paint.Cap.BUTT
+            }
             is Timer -> timer(c, t, x, cy, w, u, ink)
             is ArtStrip -> artStrip(c, t, x, cy, w, u)
             is ProgressMark -> progress(c, t, x, cy, u, ink)
