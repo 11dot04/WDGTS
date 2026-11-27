@@ -147,6 +147,72 @@ abstract class MusicBase : ImageWidget() {
 //    along the bottom: previous / next on the left half (two discs at rest, one pill while playing), play / pause
 //    as a pill on the right.
 // ============================================================================================
+/** Tells a real subject from texture (roses, handwriting, a pattern): too much of the picture, or many separate pieces, is not one. */
+private object CutoutCheck {
+    private val cache = HashMap<Long, Boolean>()
+    @Synchronized fun usable(fg: Bitmap): Boolean = cache.getOrPut(SubjectFit.fingerprint(fg)) { compute(fg) }
+
+    private fun compute(fg: Bitmap): Boolean {
+        val s = SubjectFit.subjectOf(fg) ?: return false
+        val n = s.mw * s.mh
+        val on = s.mask.count { it }
+        val coverage = on / n.toFloat()
+        if (coverage > 0.55f) return false
+        val seen = BooleanArray(n)
+        val stack = IntArray(n)
+        var big = 0
+        for (start in 0 until n) if (s.mask[start] && !seen[start]) {
+            var sp = 0
+            var size = 0
+            stack[sp++] = start; seen[start] = true
+            while (sp > 0) {
+                val i = stack[--sp]
+                size++
+                val x = i % s.mw
+                val y = i / s.mw
+                if (x > 0 && s.mask[i - 1] && !seen[i - 1]) { seen[i - 1] = true; stack[sp++] = i - 1 }
+                if (x < s.mw - 1 && s.mask[i + 1] && !seen[i + 1]) { seen[i + 1] = true; stack[sp++] = i + 1 }
+                if (y > 0 && s.mask[i - s.mw] && !seen[i - s.mw]) { seen[i - s.mw] = true; stack[sp++] = i - s.mw }
+                if (y < s.mh - 1 && s.mask[i + s.mw] && !seen[i + s.mw]) { seen[i + s.mw] = true; stack[sp++] = i + s.mw }
+            }
+            if (size >= n * 0.01f) big++
+        }
+        return big <= 5
+    }
+}
+
+/** How busy the art is behind [box] (0..1): the mean luminance step between neighbouring samples. Flat covers sit near 0.02, handwriting or ornament above 0.08. */
+private fun busyness(art: Bitmap, place: SubjectFit.Place, box: RectF): Float {
+    val g = 64
+    val small = Bitmap.createScaledBitmap(art, g, g, true)
+    val x0 = (((box.left - place.ox) / place.dw) * g).toInt().coerceIn(0, g - 2)
+    val x1 = (((box.right - place.ox) / place.dw) * g).toInt().coerceIn(x0 + 1, g - 1)
+    val y0 = (((box.top - place.oy) / place.dh) * g).toInt().coerceIn(0, g - 2)
+    val y1 = (((box.bottom - place.oy) / place.dh) * g).toInt().coerceIn(y0 + 1, g - 1)
+    fun lum(x: Int, y: Int): Float {
+        val p = small.getPixel(x, y)
+        return (0.299f * Color.red(p) + 0.587f * Color.green(p) + 0.114f * Color.blue(p)) / 255f
+    }
+    var sum = 0f
+    var n = 0
+    for (y in y0..y1) for (x in x0..x1) {
+        if (x < x1) { sum += Math.abs(lum(x + 1, y) - lum(x, y)); n++ }
+        if (y < y1) { sum += Math.abs(lum(x, y + 1) - lum(x, y)); n++ }
+    }
+    return if (n == 0) 0f else sum / n
+}
+
+/** Average brightness (0..1) of the bottom half of the cover, where the gradient and the buttons sit. */
+private fun bottomLuminance(art: Bitmap): Float {
+    val s = Bitmap.createScaledBitmap(art, 8, 8, true)
+    var sum = 0f
+    for (y in 4 until 8) for (x in 0 until 8) {
+        val p = s.getPixel(x, y)
+        sum += (0.299f * Color.red(p) + 0.587f * Color.green(p) + 0.114f * Color.blue(p)) / 255f
+    }
+    return sum / 32f
+}
+
 /** Average brightness (0..1) of the top of the cover, where the title sits. */
 private fun topLuminance(art: Bitmap): Float {
     val s = Bitmap.createScaledBitmap(art, 8, 8, true)
@@ -158,7 +224,7 @@ private fun topLuminance(art: Bitmap): Float {
     return sum / 32f
 }
 
-private class DWord(val text: String, val x: Float, val base: Float, val front: Boolean)
+private class DWord(val text: String, val x: Float, val base: Float, val front: Boolean, val w: Float)
 private class DepthLayout(val place: SubjectFit.Place?, val words: List<DWord>, val size: Float, val cutOut: Boolean)
 
 /** The last few solved layouts, so two widgets of different sizes (or the app's preview) do not push each other out. */
@@ -185,7 +251,7 @@ private fun titleVariants(title: String, fp: MusicFonts.Pick, maxW: Float, maxH:
     return out
 }
 
-private class W(val text: String, val x: Float, val base: Float, val rect: RectF)
+private class W(val text: String, val x: Float, val base: Float, val rect: RectF, val letters: List<RectF>)
 
 /** Where each word of the left-aligned title sits at [size], with its rectangle. */
 private fun wordsOf(lines: List<String>, size: Float, fp: MusicFonts.Pick, pad: Float, topGap: Float, dy: Float, memo: HashMap<String, Float>): List<W> {
@@ -197,7 +263,12 @@ private fun wordsOf(lines: List<String>, size: Float, fp: MusicFonts.Pick, pad: 
         var x = pad
         for (word in l.split(" ").filter { it.isNotBlank() }) {
             val wd = ww(word)
-            out += W(word, x, base, RectF(x, base - size * 0.70f, x + wd, base))
+            val letters = ArrayList<RectF>()
+            for (k in word.indices) {
+                val l0 = if (k == 0) 0f else ww(word.substring(0, k))
+                letters += RectF(x + l0, base - size * 0.70f, x + ww(word.substring(0, k + 1)), base)
+            }
+            out += W(word, x, base, RectF(x, base - size * 0.70f, x + wd, base), letters)
             x += wd + space
         }
     }
@@ -236,7 +307,7 @@ private fun solveDepth(
     val memo = HashMap<String, Float>()
     val biggest = variants.maxByOrNull { it.second }
     fun plain(place: SubjectFit.Place?, cutOut: Boolean) = DepthLayout(
-        place, biggest?.let { b -> wordsOf(b.first, b.second, fp, pad, topGap, 0f, memo).map { DWord(it.text, it.x, it.base, false) } } ?: emptyList(),
+        place, biggest?.let { b -> wordsOf(b.first, b.second, fp, pad, topGap, 0f, memo).map { DWord(it.text, it.x, it.base, false, it.rect.width()) } } ?: emptyList(),
         biggest?.second ?: 0f, cutOut,
     )
     if (art == null) return plain(null, false)
@@ -256,12 +327,17 @@ private fun solveDepth(
     class Cand(val place: SubjectFit.Place, val words: List<W>, val front: BooleanArray, val size: Float)
     var bestScore = -1e9f
     var best: Cand? = null
-    for (v in variants) for (f in floatArrayOf(1f, 0.94f, 0.88f, 0.85f)) for (dy in floatArrayOf(0f, 0.07f * h, 0.14f * h)) {
+    for (v in variants) for (f in floatArrayOf(1f, 0.94f, 0.88f, 0.85f)) for (dy in floatArrayOf(0f, 0.07f * h, 0.14f * h, 0.22f * h, 0.30f * h)) {
         val ws = wordsOf(v.first, v.second * f, fp, pad, topGap, dy, memo)
         if (dy > 0f && ws.last().base > maxBase) continue                    // moving the title down must not run into the lyrics
         val rects = ws.map { it.rect }
         for (c in valid) {
-            val front = BooleanArray(ws.size) { i -> subj != null && 1f - SubjectFit.covered(c, subj, listOf(rects[i])) < 0.55f }
+            val front = BooleanArray(ws.size) { i ->
+                subj != null && (
+                    1f - SubjectFit.covered(c, subj, listOf(rects[i])) < 0.55f ||
+                        ws[i].letters.any { 1f - SubjectFit.covered(c, subj, listOf(it)) < 0.45f }       // one lost letter ruins a word (D_vet)
+                    )
+            }
             val theirs = readable.map { RectF(c.ox + it.x0 * c.dw, c.oy + it.y0 * c.dh, c.ox + it.x1 * c.dw, c.oy + it.y1 * c.dh) }
             val score = v.second * f / sMax - 1.4f * moveCost(c) - 0.3f * dy / h - 0.6f * front.count { it } / ws.size.toFloat() -
                 2.0f * overlapShare(rects, theirs) - (artistRect?.let { overlapShare(listOf(it), theirs) } ?: 0f)
@@ -269,7 +345,7 @@ private fun solveDepth(
         }
     }
     val b = best ?: return plain(mid, subj != null)
-    return DepthLayout(b.place, b.words.mapIndexed { i, wd -> DWord(wd.text, wd.x, wd.base, b.front[i]) }, b.size, subj != null)
+    return DepthLayout(b.place, b.words.mapIndexed { i, wd -> DWord(wd.text, wd.x, wd.base, b.front[i], wd.rect.width()) }, b.size, subj != null)
 }
 
 /** Greedy word wrap of a lyric line at [size]; every row but a possibly overlong single word fits [maxW]. */
@@ -349,7 +425,9 @@ private class DepthScene(val ctx: Context, val w: Int, val h: Int) {
     val lyricRows = if (lyricsOn) 2 else 1                                   // two rows are always kept free, so the title never shifts mid-song
 
     val fp = MusicFonts.pick(ctx, MusicState.key)
-    val fg: Bitmap? = MusicState.cutout
+    val fg: Bitmap? = MusicState.cutout?.takeIf { CutoutCheck.usable(it) }
+    val plate: RectF?
+    val bottomLum: Float
     val artistOn = MusicPrefs.depthArtist(ctx)
     val hideArtist: Boolean
     val artistText = MusicState.artist.uppercase()
@@ -390,7 +468,21 @@ private class DepthScene(val ctx: Context, val w: Int, val h: Int) {
         val maxBase = minOf(0.64f * h, lyricBase - lyricSize * (1f + 1.14f * (lyricRows - 1)) - 3f * u)
         val ck = "${MusicState.key}|$w|$h|${SubjectFit.fingerprint(art)}|${SubjectFit.fingerprint(fg)}|$lyricRows|${MusicState.coverTextSig}|$hideTitle|$showArtist"
         lay = DepthCache.get(ck) { solveDepth(art, fg, if (hideTitle) "" else shown, fp, w, h, pad, topGap, maxBase, boxes, artistRect) }
-        artKey = "$ck|${MusicState.cleanTitle()}|$showArtist|$darkType"
+        bottomLum = art?.let { bottomLuminance(it) } ?: 0.3f
+        // a soft plate behind the title where the cover's own lettering or a busy texture would swallow it
+        var pl: RectF? = null
+        val pm = lay.place
+        if (art != null && pm != null && lay.words.isNotEmpty()) {
+            val rects = lay.words.map { RectF(it.x, it.base - lay.size * 0.70f, it.x + it.w, it.base) }
+            val box = RectF(rects.minOf { it.left }, rects.minOf { it.top }, rects.maxOf { it.right }, rects.maxOf { it.bottom })
+            val theirs = boxes.filter { it.h >= 0.02f }.map { RectF(pm.ox + it.x0 * pm.dw, pm.oy + it.y0 * pm.dh, pm.ox + it.x1 * pm.dw, pm.oy + it.y1 * pm.dh) }
+            if (overlapShare(rects, theirs) > 0.12f || busyness(art, pm, box) > 0.075f) {
+                val m = 1.8f * u
+                pl = RectF(maxOf(0f, box.left - m), maxOf(0f, box.top - m), minOf(w.toFloat(), box.right + m), box.bottom + m)
+            }
+        }
+        plate = pl
+        artKey = "$ck|${MusicState.cleanTitle()}|$showArtist|$darkType|${pl != null}"
 
         // the lyric line being sung: one size for the whole song, wrapping to a second row instead of shrinking
         val line = if (lyricsOn) Lyrics.current(MusicState.positionMs()) else null
@@ -418,6 +510,20 @@ private class DepthScene(val ctx: Context, val w: Int, val h: Int) {
         if (art != null && place != null) with(SubjectFit) { drawPlaced(art, place, w, h, false, 11f * u, fg) } else drawColor(p.surface)
         drawRect(full, Paint().also { it.color = Color.argb(64, 0, 0, 0) })
 
+        // a plate behind the title when the cover is busy there: the blurred cover with a veil, so the type reads
+        if (plate != null && art != null) {
+            val under = SubjectFit.underlay(art, null)
+            val kc = maxOf(w / under.width.toFloat(), h / under.height.toFloat())
+            val cw = under.width * kc
+            val ch = under.height * kc
+            val clip = Path().apply { addRoundRect(plate, 2.6f * u, 2.6f * u, Path.Direction.CW) }
+            val sv = save()
+            clipPath(clip)
+            drawBitmap(under, null, RectF((w - cw) / 2f, (h - ch) / 2f, (w + cw) / 2f, (h + ch) / 2f), Paint(Paint.FILTER_BITMAP_FLAG))
+            drawRect(plate, Paint().also { it.color = if (darkType) Color.argb(120, 255, 255, 255) else Color.argb(110, 0, 0, 0) })
+            restoreToCount(sv)
+        }
+
         // layer 2: the title, behind the subject
         drawWords(false)
 
@@ -433,8 +539,10 @@ private class DepthScene(val ctx: Context, val w: Int, val h: Int) {
         drawWords(true)
 
         // a gradient so the lyric line and the buttons read on any cover
+        // (tinted with the cover's own dark tone, and lighter on light covers, so it does not turn them grey)
+        val gradEnd = Color.HSVToColor((170 - 90 * bottomLum).toInt().coerceIn(70, 170), floatArrayOf(hue, 0.45f, 0.10f))
         drawRect(0f, 0.5f * h, w.toFloat(), h.toFloat(), Paint().also {
-            it.shader = LinearGradient(0f, 0.5f * h, 0f, h.toFloat(), Color.argb(0, 0, 0, 0), Color.argb(150, 0, 0, 0), Shader.TileMode.CLAMP)
+            it.shader = LinearGradient(0f, 0.5f * h, 0f, h.toFloat(), Color.HSVToColor(0, floatArrayOf(hue, 0.45f, 0.10f)), gradEnd, Shader.TileMode.CLAMP)
         })
 
         if (artistOn && !hideArtist && artistText.isNotBlank()) {
@@ -527,8 +635,8 @@ class MusicDepthWidget : MusicBase() {
             sent.remove(id)
             val rv = RemoteViews(c.packageName, layoutRes)
             rv.setImageViewBitmap(R.id.img, Render.bitmap(w, h) { idleCard(c, w, h) })
-            rv.setViewVisibility(R.id.img_lyric, View.GONE)
-            rv.setViewVisibility(R.id.img_btn, View.GONE)
+            rv.setViewVisibility(R.id.img_lyric, View.INVISIBLE)
+            rv.setViewVisibility(R.id.img_btn, View.INVISIBLE)
             bind(c, rv, id)
             m.updateAppWidget(id, rv)
             return
@@ -543,7 +651,7 @@ class MusicDepthWidget : MusicBase() {
             rv.setImageViewBitmap(R.id.img, Render.bitmap(w, h) { s.drawArt(this) })
             rv.setImageViewBitmap(R.id.img_btn, buttonBitmap())
             rv.setViewVisibility(R.id.img_btn, View.VISIBLE)
-            if (s.lyricKey.isEmpty()) rv.setViewVisibility(R.id.img_lyric, View.GONE)
+            if (s.lyricKey.isEmpty()) rv.setViewVisibility(R.id.img_lyric, View.INVISIBLE)
             else { rv.setImageViewBitmap(R.id.img_lyric, lyricBitmap()); rv.setViewVisibility(R.id.img_lyric, View.VISIBLE) }
             bind(c, rv, id)
             m.updateAppWidget(id, rv)
@@ -552,7 +660,7 @@ class MusicDepthWidget : MusicBase() {
             var any = false
             if (last.btn != s.btnKey) { rv.setImageViewBitmap(R.id.img_btn, buttonBitmap()); any = true }
             if (last.lyric != s.lyricKey) {
-                if (s.lyricKey.isEmpty()) rv.setViewVisibility(R.id.img_lyric, View.GONE)
+                if (s.lyricKey.isEmpty()) rv.setViewVisibility(R.id.img_lyric, View.INVISIBLE)
                 else { rv.setImageViewBitmap(R.id.img_lyric, lyricBitmap()); rv.setViewVisibility(R.id.img_lyric, View.VISIBLE) }
                 any = true
             }
