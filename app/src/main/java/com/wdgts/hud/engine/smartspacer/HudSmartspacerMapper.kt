@@ -303,7 +303,7 @@ class HudSmartspacerMapper(private val locale: Locale = Locale.getDefault()) {
                 else -> "IN"
             }
             line += Text(lead)
-            line += HudRules.countdownTokens(minutes)
+            line += HudRules.countdownTokens(minutes, withHands = true)
         } else if (sub.isNotEmpty()) {
             line += Text(txt(sub, hide))
         }
