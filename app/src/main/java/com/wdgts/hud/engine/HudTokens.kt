@@ -88,6 +88,18 @@ data class Chip(val icon: Any, val text: String, override val tap: TapRef? = nul
 /** A row of dots: [done] filled, the rest outlined (progress such as streaks). */
 data class DotRow(val done: Int, val total: Int, override val tap: TapRef? = null) : Token
 
+/**
+ * One segment of a connected group, like a Material button group: a filled rounded rectangle with the icon and the count
+ * knocked out. [role] says which corners are round: 0 alone, 1 first, 2 middle, 3 last.
+ */
+data class ChipSegment(val icon: Any?, val text: String, val role: Int = 0, override val tap: TapRef? = null) : Token
+
+/**
+ * The USB-C socket as a battery: an outlined pill with the socket inside and the percentage in it. Plugged in, the socket
+ * fills in ([progress] 0..1, the plug going in) and the level shows as a tint from the left with a line at the current level.
+ */
+data class ChargePill(val level: Int, val plugged: Boolean, val progress: Float = 1f, override val tap: TapRef? = null) : Token
+
 /** The same dots as [DotRow] in two staggered rows, diagonally stacked, so a long row takes half the width. */
 data class DotGrid(val done: Int, val total: Int, override val tap: TapRef? = null) : Token
 
@@ -150,6 +162,8 @@ data class Block(
     val group: String? = null,
     /** Goes on the last line of the content, after everything else (calls and notification chips), but keeps its place when space is short. */
     val tail: Boolean = false,
+    /** Dropped first when the weather would rather have its own line than a temperature chip on line 1. */
+    val droppable: Boolean = false,
 )
 
 /**

@@ -19,6 +19,11 @@ class FlowLayout(
         is GlyphToken -> glyphSize(t.glyph).first
         is Chip -> Hud.CHIP_PAD_L + Hud.CHIP_ICON + Hud.CHIP_GAP + m.pill(t.text) + Hud.CHIP_PAD_R
         is DotRow -> t.total * Hud.DOT + (t.total - 1).coerceAtLeast(0) * Hud.DOT_GAP
+        is ChipSegment -> maxOf(
+            Hud.PILL_H * 1.2f,
+            2.6f + (if (t.icon != null) Hud.CHIP_ICON + (if (t.text.isNotEmpty()) 1.4f else 0f) else 0f) + m.pill(t.text) + 2.6f,
+        )
+        is ChargePill -> 25.5f
         is DotGrid -> ((t.total + 1) / 2) * Hud.DOT * 0.95f + Hud.DOT * 0.5f
         is Tally -> tallyWidth(t.total)
         is IconPill -> Hud.ICONPILL_W
@@ -40,6 +45,7 @@ class FlowLayout(
         a is Text && b is NumeralPill -> 2f
         a is Text && b is GlyphToken && b.glyph.isUnit -> 0.4f
         a is Text && b is Text -> m.bodyAdv
+        a is ChipSegment && b is ChipSegment -> 0.8f
         a is Icon && b is Text -> 2f
         (a is OutlinePill || a is Chip) && (b is OutlinePill || b is Chip) -> 1.6f
         a is IconPill && (b is OutlinePill || b is CountRing) -> 0.8f
@@ -306,7 +312,7 @@ class LinePacker(private val flow: FlowLayout) {
                 if (!flow.fits(joined, maxW)) continue
                 cur = b.copy(
                     id = b.id + "+" + o.id, segments = listOf(joined), compact = null, folds = emptyList(),
-                    optional = b.optional && o.optional, urgent = b.urgent || o.urgent, tail = b.tail && o.tail,
+                    optional = b.optional && o.optional, urgent = b.urgent || o.urgent, tail = b.tail || o.tail, droppable = b.droppable && o.droppable,
                 )
                 partners[cur.id] = listOf(b.id, o.id)
                 used += o.id

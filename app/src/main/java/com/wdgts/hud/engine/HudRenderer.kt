@@ -2,6 +2,7 @@ package com.wdgts.hud.engine
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.CornerPathEffect
 import android.graphics.Paint
 import android.graphics.Path
@@ -111,7 +112,11 @@ class HudRenderer(
             // otherwise it shrinks to a temperature chip on line 1, which also drops the time
             val without = packer.packed(content.blocks, size.bodyLines, maxW).second
             val with = packer.packed(listOf(wb) + content.blocks, size.bodyLines, maxW).second
-            if (wb.id in with && with.containsAll(without)) {
+            // blocks marked droppable (steps) give way, so the weather keeps its own line before it collapses into the header
+            val lost = without.filter { it !in with && '+' !in it }
+            val onlyDroppable = lost.all { id -> content.blocks.firstOrNull { it.id == id }?.droppable == true } &&
+                without.filter { it !in with && '+' in it }.isEmpty()
+            if (wb.id in with && (with.containsAll(without) || onlyDroppable)) {
                 blocks = listOf(wb) + content.blocks
                 extra = emptyList()
             } else if (content.headerCompact != null) {
@@ -230,6 +235,75 @@ class HudRenderer(
                 for (n in 0 until t.total) {
                     val cx = x + n * (Hud.DOT + Hud.DOT_GAP) * u + d / 2f
                     if (n < t.done) c.drawCircle(cx, cy, d / 2f, fill) else c.drawCircle(cx, cy, (d - Hud.STROKE * u) / 2f, stroke)
+                }
+            }
+            is ChipSegment -> {
+                val r = ph / 2f
+                val s = ph * 0.2f                                           // the corners where two segments meet are nearly square
+                val (cl, cr) = when (t.role) { 1 -> r to s; 2 -> s to s; 3 -> s to r; else -> r to r }
+                val shape = Path().apply {
+                    addRoundRect(RectF(x, cy - ph / 2f, x + w, cy + ph / 2f), floatArrayOf(cl, cl, cr, cr, cr, cr, cl, cl), Path.Direction.CW)
+                }
+                val layer = c.saveLayer(x - 2f, cy - ph, x + w + 2f, cy + ph, null)
+                fill.color = ink
+                c.drawPath(shape, fill)
+                var tx = x + 2.6f * u
+                if (t.icon != null) {
+                    icons?.paint(t.icon, c, tx, cy, Hud.CHIP_ICON * u, ink, true)
+                    tx += (Hud.CHIP_ICON + 1.4f) * u
+                }
+                if (t.text.isNotEmpty()) {
+                    knock.textSize = size(Hud.PILL_CAP, u)
+                    c.drawText(t.text, tx, cy + Hud.PILL_CAP * u / 2f, knock)
+                }
+                c.restoreToCount(layer)
+            }
+            is ChargePill -> {
+                val r = ph / 2f
+                val sw = Hud.STROKE * u * 0.9f
+                val body = Path().apply {
+                    addRoundRect(RectF(x + sw / 2f, cy - ph / 2f + sw / 2f, x + w - sw / 2f, cy + ph / 2f - sw / 2f), r, r, Path.Direction.CW)
+                }
+                stroke.color = ink
+                if (t.plugged && t.level >= 0) {                              // the level: a tint from the left and a line at the end of it
+                    val fx = x + w * t.level.coerceIn(0, 100) / 100f
+                    c.save()
+                    c.clipPath(body)
+                    fill.color = Color.argb(95, Color.red(ink), Color.green(ink), Color.blue(ink))
+                    c.drawRect(x, cy - ph / 2f, fx, cy + ph / 2f, fill)
+                    c.restore()
+                    if (t.level < 100) {
+                        stroke.strokeWidth = sw * 0.8f
+                        c.drawLine(fx, cy - ph / 2f + sw, fx, cy + ph / 2f - sw, stroke)
+                    }
+                }
+                stroke.strokeWidth = sw
+                c.drawPath(body, stroke)
+                val pad = 2.3f * u
+                val socket = RectF(x + pad + sw, cy - ph / 2f + pad + sw * 0.3f, x + w - pad - sw, cy + ph / 2f - pad - sw * 0.3f)
+                val sr = socket.height() / 2f
+                val sock = Path().apply { addRoundRect(socket, sr, sr, Path.Direction.CW) }
+                val p = if (t.plugged) t.progress.coerceIn(0f, 1f) else 0f
+                val label = if (t.level >= 0) "${t.level}%" else ""
+                knock.textSize = size(Hud.PILL_CAP, u)
+                val tx = socket.centerX() - knock.measureText(label) / 2f
+                val layer = c.saveLayer(x - 2f, cy - ph, x + w + 2f, cy + ph, null)
+                if (p > 0f) {                                                 // the plug goes in: the socket fills from its middle outwards
+                    c.save()
+                    val half = socket.width() / 2f * p
+                    c.clipRect(socket.centerX() - half, socket.top, socket.centerX() + half, socket.bottom)
+                    fill.color = ink
+                    c.drawPath(sock, fill)
+                    c.restore()
+                }
+                stroke.strokeWidth = sw * 0.7f
+                c.drawPath(sock, stroke)
+                if (p >= 0.5f) c.drawText(label, tx, cy + Hud.PILL_CAP * u / 2f, knock)
+                c.restoreToCount(layer)
+                if (p < 0.5f) {
+                    pillText.textSize = size(Hud.PILL_CAP, u)
+                    pillText.color = ink
+                    c.drawText(label, tx, cy + Hud.PILL_CAP * u / 2f, pillText)
                 }
             }
             is DotGrid -> {
