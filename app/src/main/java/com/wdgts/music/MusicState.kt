@@ -31,15 +31,21 @@ object MusicState {
     /** Stable per-track number: drives the random shape and the random font + axes. */
     val key: Long get() = (title.hashCode().toLong() shl 32) xor (artist.hashCode().toLong() and 0xffffffffL)
 
-    /** The song title without what the player adds to it: (feat. X), - Remastered 2011, (Remix), [Instrumental], (Cover) and the like. */
-    fun cleanTitle(): String {
-        val t = title
+    /** The title as the widgets show it: already cleaned when it was stored, so this is the title itself. */
+    fun cleanTitle(): String = title
+
+    /**
+     * A song title without what the player adds to it: (feat. X), - Remastered 2011, (Remix), [Instrumental], (Cover),
+     * (Official Video) and the like. Used once, where the title is stored, so every music widget and the HUD agree.
+     */
+    fun clean(raw: String): String {
         val kw = "feat|ft|featuring|cover|instrumental|remix|remaster(?:ed)?|version|edit|mix|live|acoustic|demo|bonus|deluxe|radio|extended|original|" +
             "karaoke|sped up|slowed|reverb|from|soundtrack|ost|explicit|clean|remake|mono|stereo|session|reprise|vip|rework|bootleg|a cappella|acapella"
-        var s = t.replace(Regex("\\s*[\\(\\[\\{][^\\)\\]\\}]*\\b(?:$kw)\\b[^\\)\\]\\}]*[\\)\\]\\}]", RegexOption.IGNORE_CASE), "")
+        var s = raw.replace(Regex("\\s*[\\(\\[\\{][^\\)\\]\\}]*\\b(?:$kw)\\b[^\\)\\]\\}]*[\\)\\]\\}]", RegexOption.IGNORE_CASE), "")
         s = s.replace(Regex("\\s+[-–—]\\s+(?=.*\\b(?:$kw)\\b).*$", RegexOption.IGNORE_CASE), "")
         s = s.replace(Regex("\\s+(?:feat\\.?|ft\\.?|featuring)\\s+.*$", RegexOption.IGNORE_CASE), "")
-        return s.trim().ifBlank { t }
+        s = com.wdgts.hud.engine.HudText.cleanTitle(s)            // the player-noise words YouTube Music adds (Official Video, Lyrics...)
+        return s.trim().ifBlank { raw }
     }
 
     /** What the Depth widget is working from, for working out a wrong cut-out or missing art. */

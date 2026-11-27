@@ -105,7 +105,7 @@ class MediaListener : NotificationListenerService() {
         val md = c.metadata
         val pb = c.playbackState
         val oldKey = MusicState.key
-        MusicState.title = md?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: ""
+        MusicState.title = MusicState.clean(md?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "")
         MusicState.artist = md?.getString(MediaMetadata.METADATA_KEY_ARTIST)
             ?: md?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST) ?: ""
         MusicState.pkg = c.packageName ?: ""
